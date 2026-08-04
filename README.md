@@ -11,6 +11,10 @@
 
 ---
 
+<img width="1034" height="758" alt="image" src="https://github.com/user-attachments/assets/03d8d8ee-8b46-493e-ba3f-3db116536d0c" />
+
+---
+
 ## Índice
 
 - [Descripción](#descripción)
