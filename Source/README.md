@@ -10,6 +10,8 @@ Desde la versión 2.4, el listado es un control propio de WinSlim Update: no uti
 
 Desde la versión 3.0, **Actualizaciones de paquetes** es un apartado propio para las aplicaciones instaladas. Utiliza WinGet y se mantiene separado de las actualizaciones del sistema administradas mediante Windows Update.
 
+Desde la versión 3.0.8, **Actualizaciones de WinSlim** es una tercera sección independiente. Solo aparece cuando `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OEMInformation\OTAManifestVersion` existe como `REG_SZ`. Consulta las releases estables de WinSlim11_OTAs y muestra únicamente tags `WS11OTA_X.Y.Z` posteriores a la versión registrada.
+
 ## Funciones
 
 - Buscar actualizaciones de Windows y otros productos de Microsoft.
@@ -24,6 +26,10 @@ Desde la versión 3.0, **Actualizaciones de paquetes** es un apartado propio par
 - Copiar enlaces directos de descarga y consultar la página de soporte de cada KB.
 - Detectar los paquetes instalados para los que WinGet ofrece una versión nueva.
 - Filtrar, seleccionar y actualizar paquetes sin mezclarlos con las actualizaciones de Windows.
+- Filtrar las actualizaciones de Windows por categoría, buscarlas por texto, marcarlas todas o aplicarlas en conjunto.
+- Retirar de la lista de pendientes cada actualización manual inmediatamente después de instalarla correctamente.
+- Consultar las WinSlim OTAs disponibles, ver su fecha e identificar la última release.
+- Descargar el ZIP OTA seleccionado, extraerlo de forma segura, ejecutar `Install_Update.exe` y limpiar los archivos temporales al terminar.
 
 ## Uso
 
@@ -34,13 +40,15 @@ Desde la versión 3.0, **Actualizaciones de paquetes** es un apartado propio par
 
 Para actualizar aplicaciones, abre **Actualizaciones de paquetes**, pulsa **Buscar paquetes**, marca los elementos deseados y elige **Actualizar selección**. Esta función requiere WinGet, incluido con las versiones actuales de *Instalador de aplicación* de Microsoft.
 
+En una instalación compatible, abre **Actualizaciones de WinSlim**, pulsa **Buscar OTAs**, selecciona una release y elige **Aplicar actualización**. La aplicación espera a que finalice `Install_Update.exe` antes de borrar el ZIP y la carpeta extraída.
+
 Si una actualización de paquete falla, WinSlim Update interpreta el código de WinGet y, cuando está disponible, el código del instalador MSI o EXE. El modal de error resume la causa detectada y permite consultar o copiar el comando, la salida completa y los registros relacionados antes de reintentar.
 
 La aplicación no instala nada sin una acción explícita del usuario.
 
 ## Compilación
 
-El proyecto usa Windows Forms y .NET Framework 4.6.1. Abre `wumgr.sln` en Visual Studio con las herramientas de desarrollo de escritorio de .NET, o ejecuta `build-release.ps1` desde PowerShell.
+El proyecto usa Windows Forms y .NET Framework 4.6.1. Desde la raíz del repositorio ejecuta `Compilar.cmd`: muestra la versión actual, permite cambiarla y genera la compilación Release. Como alternativa, abre `wumgr.sln` en Visual Studio o ejecuta `build-release.ps1` desde PowerShell.
 
 Las bibliotecas de interoperabilidad incluidas se generan a partir de las bibliotecas de tipos de Windows Update Agent y del Programador de tareas presentes en Windows. No se necesita ningún paquete externo.
 

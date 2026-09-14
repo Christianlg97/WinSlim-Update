@@ -55,6 +55,7 @@ namespace wumgr
         private readonly List<DarkComboBoxRenderer> modernComboRenderers = new List<DarkComboBoxRenderer>();
         private readonly Dictionary<Button, ActionButtonVisualStyle> actionButtonStyles =
             new Dictionary<Button, ActionButtonVisualStyle>();
+        private Timer actionButtonHoverTimer;
         private Timer modernListToolTipTimer;
         private string modernListToolTipCell = string.Empty;
         private string modernListToolTipText = string.Empty;
@@ -1063,20 +1064,20 @@ namespace wumgr
             btnCancel.TextImageRelation = TextImageRelation.Overlay;
 
             modernLogButton = new Button();
-            modernLogButton.Text = "Ver actividad";
+            StyleSecondaryActionButton(modernLogButton, "Ver actividad", UiText);
+            ActionButtonVisualStyle logButtonStyle;
+            if (actionButtonStyles.TryGetValue(modernLogButton, out logButtonStyle))
+            {
+                logButtonStyle.Background = UiSurface;
+                logButtonStyle.Outline = true;
+            }
             modernLogButton.Dock = DockStyle.None;
             modernLogButton.Anchor = AnchorStyles.None;
             modernLogButton.Size = new Size(124, 32);
             modernLogButton.MinimumSize = new Size(124, 32);
             modernLogButton.MaximumSize = new Size(124, 32);
             modernLogButton.Margin = new Padding(2, 0, 0, 0);
-            modernLogButton.FlatStyle = FlatStyle.Flat;
-            modernLogButton.FlatAppearance.BorderColor = UiBorder;
-            modernLogButton.FlatAppearance.MouseOverBackColor = UiHover;
-            modernLogButton.BackColor = UiSurface;
-            modernLogButton.ForeColor = UiMuted;
             modernLogButton.Font = new Font("Segoe UI Semibold", 8.8F, FontStyle.Bold);
-            modernLogButton.Cursor = Cursors.Hand;
             modernLogButton.Click += modernLogButton_Click;
 
             lblSupport.Dock = DockStyle.Fill;
@@ -1454,11 +1455,65 @@ namespace wumgr
             };
             button.Paint -= actionButton_Paint;
             button.Paint += actionButton_Paint;
-            button.MouseEnter += actionButton_StateChanged;
-            button.MouseLeave += actionButton_StateChanged;
+            button.MouseEnter -= actionButton_MouseEnter;
+            button.MouseEnter += actionButton_MouseEnter;
+            button.MouseLeave -= actionButton_MouseLeave;
+            button.MouseLeave += actionButton_MouseLeave;
             button.MouseDown += actionButton_StateChanged;
             button.MouseUp += actionButton_StateChanged;
+            button.MouseCaptureChanged += actionButton_StateChanged;
             button.EnabledChanged += actionButton_StateChanged;
+        }
+
+        private void actionButton_MouseEnter(object sender, EventArgs e)
+        {
+            Button button = sender as Button;
+            ActionButtonVisualStyle style;
+            if (button == null || !actionButtonStyles.TryGetValue(button, out style))
+                return;
+
+            style.Hovered = button.Enabled;
+            button.Invalidate();
+
+            if (actionButtonHoverTimer == null)
+            {
+                actionButtonHoverTimer = new Timer();
+                actionButtonHoverTimer.Interval = 80;
+                actionButtonHoverTimer.Tick += actionButtonHoverTimer_Tick;
+            }
+            actionButtonHoverTimer.Start();
+        }
+
+        private void actionButton_MouseLeave(object sender, EventArgs e)
+        {
+            Button button = sender as Button;
+            ActionButtonVisualStyle style;
+            if (button != null && actionButtonStyles.TryGetValue(button, out style))
+            {
+                style.Hovered = false;
+                button.Invalidate();
+            }
+        }
+
+        private void actionButtonHoverTimer_Tick(object sender, EventArgs e)
+        {
+            bool anyHovered = false;
+            foreach (KeyValuePair<Button, ActionButtonVisualStyle> pair in actionButtonStyles)
+            {
+                Button button = pair.Key;
+                ActionButtonVisualStyle style = pair.Value;
+                bool pointerInside = button.Enabled && button.Visible &&
+                    button.ClientRectangle.Contains(button.PointToClient(Cursor.Position));
+                if (style.Hovered != pointerInside)
+                {
+                    style.Hovered = pointerInside;
+                    button.Invalidate();
+                }
+                anyHovered |= pointerInside;
+            }
+
+            if (!anyHovered && actionButtonHoverTimer != null)
+                actionButtonHoverTimer.Stop();
         }
 
         private void actionButton_StateChanged(object sender, EventArgs e)
@@ -1475,7 +1530,7 @@ namespace wumgr
             if (button == null || !actionButtonStyles.TryGetValue(button, out style))
                 return;
 
-            bool pointerInside = button.Enabled && button.ClientRectangle.Contains(button.PointToClient(Cursor.Position));
+            bool pointerInside = button.Enabled && style.Hovered;
             bool pressed = pointerInside && (Control.MouseButtons & MouseButtons.Left) == MouseButtons.Left;
             Color background = button.Enabled
                 ? (pressed ? BlendUiColor(style.Background, Color.White, style.Secondary ? 0.13F : 0.07F)
@@ -1490,6 +1545,15 @@ namespace wumgr
             using (GraphicsPath path = CreateRoundedPath(bounds, 9))
             using (SolidBrush brush = new SolidBrush(background))
                 e.Graphics.FillPath(brush, path);
+
+            if (style.Outline)
+            {
+                Rectangle outlineBounds = new Rectangle(1, 1,
+                    Math.Max(1, button.Width - 3), Math.Max(1, button.Height - 3));
+                using (GraphicsPath outlinePath = CreateRoundedPath(outlineBounds, 8))
+                using (Pen outlinePen = new Pen(UiBorder, 1.2F))
+                    e.Graphics.DrawPath(outlinePen, outlinePath);
+            }
 
             DrawActionButtonContents(e.Graphics, button, bounds, foreground);
             e.Graphics.SmoothingMode = SmoothingMode.Default;
@@ -1726,6 +1790,8 @@ namespace wumgr
             public Color Background;
             public Color Foreground;
             public bool Secondary;
+            public bool Outline;
+            public bool Hovered;
         }
 
         private void PopulateHistoryPreview()

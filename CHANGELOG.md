@@ -1,5 +1,20 @@
 # Changelog
 
+## WinSlim Update 3.0.8
+
+- Añadida la categoría independiente **WINSLIM OTAS**, separada de las aplicaciones y de las actualizaciones de la base Windows.
+- La sección OTA solo se muestra cuando `OTAManifestVersion` existe como valor `REG_SZ` bajo `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\OEMInformation`; de lo contrario no se crea ni puede abrirse.
+- Consulta automática de releases estables en `Christianlg97/WinSlim11_OTAs`, comparación numérica de tags `WS11OTA_X.Y.Z` y presentación exclusiva de versiones posteriores a la instalada.
+- El listado OTA muestra nombre, versión, fecha, archivo, tamaño y el indicador de última versión disponible sin duplicar el tag como categoría informativa.
+- Nuevo flujo **Aplicar actualización**: descarga el ZIP, valida su extracción, ejecuta `Install_Update.exe`, espera su cierre y limpia todos los archivos temporales.
+- Nueva barra contextual para actualizaciones de Windows con filtro emergente, accesos por categoría, selección global, aplicación de todas las actualizaciones y búsqueda plegable.
+- Las actualizaciones completadas mediante el instalador manual desaparecen de pendientes conforme finalizan; las fallidas permanecen disponibles.
+- Estados de actividad unificados como **Descargando actualizaciones...** e **Instalando actualizaciones...**.
+- Estilo oscuro y redondeado corregido en botones de acción, paquetes y **Ver actividad**, incluido el restablecimiento fiable del hover.
+- Navegación lateral reorganizada y normalizada con **ACTUALIZACIONES DE LA BASE WINDOWS**, **APLICACIONES**, **WINSLIM OTAS** y **CONFIGURACIÓN**.
+- Añadido `Compilar.cmd`, que muestra la versión actual, permite modificarla, localiza MSBuild y genera la salida Release.
+- Actualizada la documentación general, técnica, de compilación y privacidad para cubrir los tres motores de actualización.
+
 ## WinSlim Update 3.0.3
 
 - Eliminado por completo el submenú visual «Herramientas»; el menú de la aplicación muestra únicamente «Acerca de» y «Salir».

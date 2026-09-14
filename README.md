@@ -1,10 +1,10 @@
 <h1 align="center">WinSlim Update</h1>
 
-<h3 align="center">Control moderno y explícito de las actualizaciones de Windows y aplicaciones</h3>
+<h3 align="center">Control moderno y explícito de Windows, aplicaciones y WinSlim OTAs</h3>
 
-<p align="center"><strong>Windows 10 / 11 · Windows Forms · .NET Framework 4.6.1 · WinGet · Windows Update Agent</strong></p>
+<p align="center"><strong>Windows 10 / 11 · Windows Forms · .NET Framework 4.6.1 · Windows Update Agent · WinGet · GitHub Releases</strong></p>
 
-<p align="center"><code>Versión 3.0.6</code> · <code>Any CPU</code> · <code>UAC obligatorio</code> · <code>GPL-3.0</code></p>
+<p align="center"><code>Versión 3.0.8</code> · <code>Any CPU</code> · <code>UAC obligatorio</code> · <code>GPL-3.0</code></p>
 
 > [!IMPORTANT]
 > WinSlim Update no instala actualizaciones por iniciativa propia. La búsqueda, selección e instalación siguen dependiendo de las acciones y de la configuración elegidas por el usuario.
@@ -24,6 +24,7 @@
 - [Arquitectura](#arquitectura)
 - [Actualizaciones del sistema](#actualizaciones-del-sistema)
 - [Actualizaciones de paquetes](#actualizaciones-de-paquetes)
+- [Actualizaciones de WinSlim (OTAs)](#actualizaciones-de-winslim-otas)
 - [Diagnóstico de errores](#diagnóstico-de-errores)
 - [Configuración](#configuración)
 - [Seguridad y privilegios](#seguridad-y-privilegios)
@@ -39,22 +40,24 @@
 
 ## Descripción
 
-WinSlim Update es una aplicación de escritorio para administrar desde una sola interfaz dos clases de mantenimiento claramente separadas:
+WinSlim Update es una aplicación de escritorio para administrar desde una sola interfaz tres clases de mantenimiento claramente separadas:
 
 1. **Actualizaciones del sistema**, obtenidas mediante la API nativa de Windows Update.
 2. **Actualizaciones de aplicaciones**, detectadas e instaladas mediante WinGet.
+3. **Actualizaciones de WinSlim (OTAs)**, publicadas como releases en el repositorio oficial de GitHub y disponibles únicamente en instalaciones WinSlim compatibles.
 
-El proyecto parte de la base técnica de **WuMgr**, pero sustituye gran parte de su presentación por una interfaz moderna, oscura y completamente en español. La versión 3 incorpora un segundo motor para aplicaciones inspirado en el flujo de UniGetUI, sin mezclar sus resultados con las actualizaciones del sistema.
+El proyecto parte de la base técnica de **WuMgr**, pero sustituye gran parte de su presentación por una interfaz moderna, oscura y completamente en español. La versión 3 incorpora el motor de aplicaciones inspirado en UniGetUI y el canal independiente de WinSlim OTAs, sin mezclar sus resultados con las actualizaciones del sistema.
 
 | Dato | Valor |
 |---|---|
-| Versión documentada | 3.0.3 |
+| Versión documentada | 3.0.8 |
 | Plataforma | Windows 10 y Windows 11 |
 | Interfaz | Windows Forms personalizada |
 | Runtime | .NET Framework 4.6.1 |
 | Arquitectura de compilación | Any CPU, sin preferencia por 32 bits |
 | Motor del sistema | Windows Update Agent mediante COM |
 | Motor de aplicaciones | WinGet CLI |
+| Motor de WinSlim OTAs | API de releases de GitHub |
 | Elevación | Administrador obligatorio mediante manifiesto UAC |
 | Licencia principal | GNU GPL v3 |
 
@@ -68,7 +71,7 @@ Las acciones importantes se inician desde la interfaz. WinSlim Update permite re
 
 ### Separación de motores
 
-Las actualizaciones de Windows y las de aplicaciones se muestran en apartados distintos. Cada motor conserva sus propios estados, operaciones, errores y registros.
+Las actualizaciones de la base Windows, las aplicaciones y las WinSlim OTAs se muestran en apartados distintos. Cada motor conserva sus propios estados, operaciones, errores y registros.
 
 ### Diagnósticos comprensibles
 
@@ -94,6 +97,8 @@ Listados, casillas, categorías, desplazamiento, estados vacíos, botones y diá
 | Aplicaciones | Detectar actualizaciones de paquetes instalados mediante WinGet |
 | Selección de paquetes | Marcar paquetes individualmente, seleccionar todos y filtrar por texto o fuente |
 | Diagnóstico WinGet | Interpretar HRESULT, códigos Win32, MSI y errores comunes de instaladores EXE |
+| WinSlim OTAs | Detectar releases posteriores a la versión instalada, mostrar su fecha y aplicar el ZIP seleccionado |
+| Filtros del sistema | Buscar por texto, filtrar por categoría, marcar todo y aplicar todas las actualizaciones encontradas |
 | Actividad | Mostrar el registro de la sesión dentro de la propia aplicación |
 | Directivas | Ajustar el comportamiento automático de Windows Update, Store y otros componentes relacionados |
 
@@ -101,9 +106,9 @@ Listados, casillas, categorías, desplazamiento, estados vacíos, botones y diá
 
 ## Interfaz y navegación
 
-La barra lateral divide la aplicación en tres grupos conceptuales.
+La barra lateral divide la aplicación en cuatro grupos conceptuales.
 
-### Actualizaciones
+### Actualizaciones de la base Windows
 
 - **Disponibles**: actualizaciones pendientes encontradas por Windows Update.
 - **Instaladas**: elementos ya presentes en el equipo.
@@ -113,6 +118,10 @@ La barra lateral divide la aplicación en tres grupos conceptuales.
 ### Aplicaciones
 
 - **Actualizaciones de paquetes**: aplicaciones instaladas para las que WinGet ofrece una versión nueva.
+
+### WinSlim OTAs
+
+- **Actualizaciones de WinSlim**: releases OTA posteriores a la versión declarada por la instalación. Este grupo se omite por completo si el sistema no contiene un manifiesto OTA válido en el Registro.
 
 ### Configuración
 
@@ -129,7 +138,7 @@ Desde la versión 3.0.3 no existe un submenú visual de herramientas ni un inter
 
 ## Arquitectura
 
-WinSlim Update utiliza una interfaz común, pero mantiene dos recorridos de actualización independientes.
+WinSlim Update utiliza una interfaz común, pero mantiene tres recorridos de actualización independientes.
 
 ```mermaid
 flowchart TB
@@ -139,6 +148,7 @@ flowchart TB
 
     UI --> SystemPage["Actualizaciones del sistema"]
     UI --> PackagePage["Actualizaciones de paquetes"]
+    UI --> OtaPage["Actualizaciones de WinSlim"]
     UI --> Settings["Configuración y directivas"]
 
     SystemPage --> Agent["WuAgent"]
@@ -152,6 +162,10 @@ flowchart TB
     WinGet --> Diagnostics["Salida, HRESULT y registros"]
     Diagnostics --> ErrorModal["Modal de diagnóstico y reintento"]
 
+    OtaPage --> Registry["OTAManifestVersion (REG_SZ)"]
+    OtaPage --> GitHub["Releases de WinSlim11_OTAs"]
+    GitHub --> OtaInstaller["ZIP / Install_Update.exe"]
+
     Settings --> GPO["Registro, directivas y servicios auxiliares"]
 ```
 
@@ -162,6 +176,7 @@ flowchart TB
 | Presentación | Navegación, tarjetas, controles modernos, estados y diálogos |
 | Dominio Windows Update | Búsqueda, historial, descarga, instalación, ocultación y desinstalación |
 | Dominio de paquetes | Consulta y actualización de aplicaciones mediante WinGet |
+| Dominio WinSlim OTA | Consulta de releases, comparación semántica, descarga, extracción y ejecución del instalador |
 | Diagnóstico | Traducción de códigos, lectura de registros y explicación de causas |
 | Sistema | UAC, servicios, directivas, archivos, IPC y configuración INI |
 
@@ -199,6 +214,15 @@ La búsqueda utiliza las interfaces COM de Windows Update. Según la configuraci
 - **Desinstalar**: solo está disponible cuando Windows indica que el paquete admite retirada.
 - **Abrir soporte**: utiliza el enlace de soporte asociado a la actualización.
 - **Copiar enlaces**: recupera los enlaces directos de descarga cuando están disponibles.
+
+La barra auxiliar aparece cuando la búsqueda devuelve elementos pendientes. Incluye:
+
+- Un menú emergente para mostrar todas las actualizaciones o limitar la lista a controladores, seguridad, componentes y .NET, definiciones o Seguridad de Windows.
+- **Marcar todo** y **Aplicar todas las actualizaciones**.
+- Accesos directos a los filtros más habituales.
+- Un buscador plegable con el texto **Buscar actualización encontrada**.
+
+Cuando se instala una selección múltiple mediante el flujo manual, cada actualización completada desaparece de la lista de pendientes inmediatamente. Los elementos fallidos permanecen disponibles para su revisión o reintento. Durante el proceso, el estado utiliza los mensajes **Descargando actualizaciones...** e **Instalando actualizaciones...**.
 
 ### Listado moderno
 
@@ -265,6 +289,42 @@ Las actualizaciones se procesan de una en una. Esto permite conocer el resultado
 
 > [!WARNING]
 > Algunos instaladores diseñados exclusivamente para el ámbito del usuario prohíben ejecutarse desde un proceso elevado. WinSlim Update explica los códigos de WinGet correspondientes, pero no omite la elevación global exigida por la aplicación.
+
+---
+
+## Actualizaciones de WinSlim (OTAs)
+
+Este apartado consulta automáticamente las releases publicadas en [Christianlg97/WinSlim11_OTAs](https://github.com/Christianlg97/WinSlim11_OTAs/releases). Es una categoría independiente de Windows Update y de las aplicaciones administradas por WinGet.
+
+### Disponibilidad de la función
+
+La sección **WINSLIM OTAS** solo se crea y puede abrirse cuando existe este valor del Registro:
+
+```text
+HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\OEMInformation
+OTAManifestVersion (REG_SZ) = WS11OTA_2.1.4
+```
+
+Se comprueban las vistas de Registro de 64 y 32 bits cuando corresponda. Si la clave no existe, el valor falta o su tipo no es `REG_SZ`, el título, el acceso lateral y la página OTA no se muestran ni son accesibles.
+
+### Detección y comparación de versiones
+
+Solo se aceptan tags con el formato exacto `WS11OTA_X.Y.Z`. La comparación es numérica por versión mayor, menor y parche; no es una comparación alfabética. Se omiten borradores y prereleases, y solo se muestran versiones estrictamente posteriores a `OTAManifestVersion`.
+
+Por ejemplo, si el Registro contiene `WS11OTA_2.1.4`, pueden aparecer `WS11OTA_2.1.5`, `WS11OTA_2.1.6` o `WS11OTA_2.2.0`, pero nunca la 2.1.4 ni versiones anteriores. La lista muestra el nombre, la versión sin repetir el tag informativo, la fecha, el ZIP, su tamaño y cuál es la última disponible.
+
+### Aplicación de una OTA
+
+Al seleccionar una release, **Aplicar actualización** realiza este flujo:
+
+1. Descarga el primer recurso `.zip` adjunto a una carpeta temporal exclusiva.
+2. Extrae su contenido validando que ninguna entrada pueda salir del directorio temporal.
+3. Localiza y ejecuta `Install_Update.exe` con su propia carpeta como directorio de trabajo.
+4. Espera a que el instalador termine y comprueba su código de salida.
+5. Elimina el ZIP y todo el contenido temporal, también cuando se produce un error recuperable.
+6. Si finaliza correctamente, vuelve a consultar las releases disponibles.
+
+La página también permite abrir la release seleccionada en GitHub. La consulta requiere conexión a GitHub y está sujeta a la disponibilidad y los límites de su API pública.
 
 ---
 
@@ -388,7 +448,7 @@ Desde la versión 3.0.3:
 
 ### Instalaciones explícitas
 
-WinSlim Update no inicia una instalación de sistema o paquete sin una acción del usuario o una automatización previamente configurada. WinGet recibe automáticamente la aceptación de los acuerdos de fuente y paquete cuando el usuario inicia una actualización.
+WinSlim Update no inicia una instalación de sistema, paquete u OTA sin una acción del usuario o una automatización previamente configurada. WinGet recibe automáticamente la aceptación de los acuerdos de fuente y paquete cuando el usuario inicia una actualización. Las OTAs requieren seleccionar una release y pulsar **Aplicar actualización**.
 
 ---
 
@@ -413,6 +473,7 @@ La aplicación intenta utilizar su propia carpeta como directorio de trabajo. Si
 | `Translation.ini` | Traducciones externas opcionales |
 | `wsusscn2.cab` | Catálogo offline de Microsoft |
 | `CHANGELOG.md` | Historial detallado de versiones |
+| `%TEMP%\WinSlimUpdate\OTA_<identificador>\` | ZIP y extracción temporal de una OTA; se eliminan al terminar el instalador o al abortar por error |
 
 ### Registros de WinGet
 
@@ -426,7 +487,7 @@ WinSlim Update lee el registro reciente relacionado con la operación para mostr
 
 ### Privacidad
 
-El proyecto no incluye telemetría propia, cuentas de usuario ni un backend de WinSlim Update. La información de actualizaciones se procesa localmente. Las búsquedas y descargas sí establecen las conexiones normales necesarias con Microsoft, las fuentes de WinGet y los servidores de los fabricantes.
+El proyecto no incluye telemetría propia, cuentas de usuario ni un backend de WinSlim Update. La información se procesa localmente. Las búsquedas y descargas sí establecen las conexiones normales necesarias con Microsoft, las fuentes de WinGet, los servidores de los fabricantes y la API o los recursos de GitHub para WinSlim OTAs.
 
 Consulta también [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
@@ -434,8 +495,10 @@ Consulta también [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
 ## Estructura del código
 
+El código compilable y sus documentos complementarios se encuentran bajo `Source`:
+
 ```text
-WinSlim Update 3.0/
+Source/
 ├── wumgr.sln
 ├── build-release.ps1
 ├── README.md
@@ -459,6 +522,7 @@ WinSlim Update 3.0/
     ├── GPO.cs                    # Directivas, Store, controladores y servicios
     ├── PackageUpdates.cs         # Página y flujo de paquetes
     ├── PackageUpdateErrorDialog.cs
+    ├── OtaUpdates.cs             # Detección, presentación y aplicación de WinSlim OTAs
     ├── Common/
     │   ├── WinGetPackageManager.cs
     │   ├── ModernUpdateList.cs
@@ -488,6 +552,7 @@ WinSlim Update 3.0/
 | `PackageUpdates.cs` | Presentación, selección, filtrado y actualización secuencial de paquetes |
 | `WinGetPackageManager.cs` | Ejecución de WinGet, análisis de tablas, códigos y registros |
 | `PackageUpdateErrorDialog.cs` | Modal de diagnóstico, copia y reintento |
+| `OtaUpdates.cs` | Registro de disponibilidad, API de GitHub, comparación de tags y aplicación segura de OTAs |
 
 ---
 
@@ -499,7 +564,7 @@ WinSlim Update 3.0/
 - Visual Studio o Visual Studio Build Tools.
 - Carga de trabajo de desarrollo de escritorio con .NET.
 - .NET Framework 4.6.1 Developer Pack o Targeting Pack.
-- PowerShell para utilizar el script auxiliar.
+- Símbolo del sistema para utilizar `Compilar.cmd` o PowerShell para el script auxiliar.
 
 ### Visual Studio
 
@@ -508,10 +573,20 @@ WinSlim Update 3.0/
 3. Ejecuta **Recompilar solución**.
 4. Recoge el resultado de `wumgr\bin\Release`.
 
-### PowerShell
+### Compilador interactivo recomendado
+
+Desde la raíz del repositorio, ejecuta:
+
+```bat
+Compilar.cmd
+```
+
+El compilador muestra la versión actual de archivo y pregunta si deseas cambiarla. Acepta versiones `X.Y.Z` o `X.Y.Z.W`, actualiza `AssemblyVersion` y `AssemblyFileVersion`, localiza MSBuild, recompila en modo Release y copia el ejecutable, el archivo de configuración y los símbolos disponibles a `Release`.
+
+### PowerShell (alternativa)
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\build-release.ps1 -Configuration Release
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Source\build-release.ps1 -Configuration Release
 ```
 
 El script busca MSBuild en Visual Studio Build Tools, Visual Studio Community y, como último recurso, en .NET Framework.
@@ -558,10 +633,22 @@ El código también contiene argumentos internos de vista previa usados para rev
 - Las directivas de Windows no se respetan de forma idéntica en todas las ediciones y compilaciones.
 - El catálogo offline solo representa la información incluida por Microsoft en `wsusscn2.cab`.
 - El proyecto utiliza .NET Framework 4.6.1 por compatibilidad con la base heredada.
+- Las WinSlim OTAs dependen de que `OTAManifestVersion` sea un `REG_SZ` válido y de que GitHub esté accesible.
+- Solo se reconocen releases estables con tags `WS11OTA_X.Y.Z` y al menos un recurso ZIP para poder aplicarlas.
 
 ---
 
 ## Historial reciente
+
+### 3.0.8
+
+- Nueva categoría independiente **WINSLIM OTAS**, visible solo en instalaciones con un manifiesto OTA válido.
+- Consulta y comparación numérica de releases de GitHub posteriores a la versión instalada.
+- Descarga, extracción segura, ejecución de `Install_Update.exe` y limpieza automática del paquete OTA.
+- Barra de herramientas contextual para filtrar, buscar, marcar y aplicar actualizaciones de Windows.
+- Eliminación inmediata de las actualizaciones manuales completadas de la lista de pendientes.
+- Botones oscuros unificados, contornos redondeados y corrección del estado hover retenido.
+- Nuevo `Compilar.cmd` interactivo para cambiar la versión y generar una compilación Release.
 
 ### 3.0.3
 

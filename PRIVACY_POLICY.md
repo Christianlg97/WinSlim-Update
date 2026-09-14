@@ -1,1 +1,13 @@
-The tool only gathers information's about installed and missing updates, all data are processed local on the users own device, no personal information's of any kind are send to the cloud.
+# Política de privacidad
+
+WinSlim Update no incluye telemetría propia, cuentas de usuario ni un servicio remoto administrado por el proyecto. La información sobre el equipo y las actualizaciones se procesa localmente.
+
+Para realizar las funciones solicitadas por el usuario, la aplicación puede conectarse a:
+
+- Los servicios de Microsoft utilizados por Windows Update.
+- Las fuentes de WinGet y los servidores de los fabricantes de aplicaciones.
+- La API y los recursos de GitHub del repositorio `Christianlg97/WinSlim11_OTAs`, únicamente cuando la instalación admite WinSlim OTAs y se consulta o aplica una release.
+
+La aplicación no envía deliberadamente datos personales a un servidor propio. Los servicios externos reciben la información técnica habitual de una conexión HTTP, de acuerdo con sus propias políticas.
+
+Los paquetes OTA se almacenan temporalmente bajo `%TEMP%\WinSlimUpdate`, se ejecutan de forma local y se eliminan cuando finaliza la operación.
