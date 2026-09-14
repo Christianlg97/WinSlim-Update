@@ -4,7 +4,7 @@
 
 <p align="center"><strong>Windows 10 / 11 · Windows Forms · .NET Framework 4.6.1 · WinGet · Windows Update Agent</strong></p>
 
-<p align="center"><code>Versión 3.0.3</code> · <code>Any CPU</code> · <code>UAC obligatorio</code> · <code>GPL-3.0</code></p>
+<p align="center"><code>Versión 3.0.6</code> · <code>Any CPU</code> · <code>UAC obligatorio</code> · <code>GPL-3.0</code></p>
 
 > [!IMPORTANT]
 > WinSlim Update no instala actualizaciones por iniciativa propia. La búsqueda, selección e instalación siguen dependiendo de las acciones y de la configuración elegidas por el usuario.
