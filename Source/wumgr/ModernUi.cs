@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -40,6 +41,8 @@ namespace wumgr
         private ModernProgressBar modernProgress;
         private ModernUpdateList modernUpdateList;
         private readonly List<DarkComboBoxRenderer> modernComboRenderers = new List<DarkComboBoxRenderer>();
+        private readonly Dictionary<Button, ActionButtonVisualStyle> actionButtonStyles =
+            new Dictionary<Button, ActionButtonVisualStyle>();
         private Timer modernListToolTipTimer;
         private string modernListToolTipCell = string.Empty;
         private string modernListToolTipText = string.Empty;
@@ -145,6 +148,8 @@ namespace wumgr
                 PopulateListPreview();
             if (Program.TestArg("-preview-packages"))
                 ShowPackageUpdatesPage();
+            if (Program.TestArg("-preview-otas"))
+                ShowOtaUpdatesPage();
             if (Program.TestArg("-preview-settings"))
             {
                 if (dlSource.Items.Count == 0)
@@ -398,7 +403,7 @@ namespace wumgr
 
             FlowLayoutPanel navigation = new FlowLayoutPanel();
             navigation.Dock = DockStyle.Top;
-            navigation.Height = 396;
+            navigation.Height = 500;
             navigation.Padding = new Padding(0, 2, 0, 0);
             navigation.Margin = Padding.Empty;
             navigation.BackColor = UiSidebar;
@@ -421,6 +426,17 @@ namespace wumgr
             StyleNavigationButton(modernPackageUpdatesButton);
             modernPackageUpdatesButton.Size = new Size(190, 50);
             modernPackageUpdatesButton.Font = new Font("Segoe UI", 8.8F, FontStyle.Regular);
+            Label otaCaption = CreateLabel("WinSlim OTAs", 8F, FontStyle.Bold, UiMuted);
+            otaCaption.AutoSize = false;
+            otaCaption.Size = new Size(190, 28);
+            otaCaption.Margin = new Padding(8, 2, 8, 0);
+            otaCaption.TextAlign = ContentAlignment.MiddleLeft;
+            modernOtaUpdatesButton = new CheckBox();
+            modernOtaUpdatesButton.Name = "modernOtaUpdatesButton";
+            modernOtaUpdatesButton.Text = "Actualizaciones de\r\nWinSlim";
+            StyleNavigationButton(modernOtaUpdatesButton);
+            modernOtaUpdatesButton.Size = new Size(190, 50);
+            modernOtaUpdatesButton.Font = new Font("Segoe UI", 8.8F, FontStyle.Regular);
             modernSettingsButton = new CheckBox();
             modernSettingsButton.Name = "modernSettingsButton";
             modernSettingsButton.Text = "Configuración";
@@ -437,6 +453,8 @@ namespace wumgr
             navigation.Controls.Add(btnHistory);
             navigation.Controls.Add(packagesCaption);
             navigation.Controls.Add(modernPackageUpdatesButton);
+            navigation.Controls.Add(otaCaption);
+            navigation.Controls.Add(modernOtaUpdatesButton);
             navigation.Controls.Add(settingsCaption);
             navigation.Controls.Add(modernSettingsButton);
             Panel footer = new Panel();
@@ -479,7 +497,9 @@ namespace wumgr
             modernUpdatePage = BuildUpdatesPage();
             modernSettingsPage = BuildSettingsPage();
             modernPackageUpdatesPage = BuildPackageUpdatesPage();
+            modernOtaUpdatesPage = BuildOtaUpdatesPage();
             contentHost.Controls.Add(modernSettingsPage);
+            contentHost.Controls.Add(modernOtaUpdatesPage);
             contentHost.Controls.Add(modernPackageUpdatesPage);
             contentHost.Controls.Add(modernUpdatePage);
 
@@ -1102,6 +1122,8 @@ namespace wumgr
         {
             if (sender == modernPackageUpdatesButton)
                 ShowPackageUpdatesPage();
+            else if (sender == modernOtaUpdatesButton)
+                ShowOtaUpdatesPage();
             else if (sender != modernSettingsButton)
                 ShowUpdatesPage();
         }
@@ -1124,7 +1146,7 @@ namespace wumgr
             button.TextAlign = ContentAlignment.MiddleCenter;
             button.Cursor = Cursors.Hand;
             button.UseVisualStyleBackColor = false;
-            button.Paint += disabledActionButton_Paint;
+            RegisterActionButtonPainting(button, background, foreground, false);
             ApplyRoundedRegion(button, 9);
         }
 
@@ -1148,8 +1170,120 @@ namespace wumgr
             button.TextAlign = ContentAlignment.MiddleCenter;
             button.Cursor = Cursors.Hand;
             button.UseVisualStyleBackColor = false;
-            button.Paint += disabledActionButton_Paint;
+            RegisterActionButtonPainting(button, UiInput, foreground, true);
             ApplyRoundedRegion(button, 9);
+        }
+
+        private void RegisterActionButtonPainting(Button button, Color background, Color foreground, bool secondary)
+        {
+            actionButtonStyles[button] = new ActionButtonVisualStyle
+            {
+                Background = background,
+                Foreground = foreground,
+                Secondary = secondary
+            };
+            button.Paint -= actionButton_Paint;
+            button.Paint += actionButton_Paint;
+            button.MouseEnter += actionButton_StateChanged;
+            button.MouseLeave += actionButton_StateChanged;
+            button.MouseDown += actionButton_StateChanged;
+            button.MouseUp += actionButton_StateChanged;
+            button.EnabledChanged += actionButton_StateChanged;
+        }
+
+        private void actionButton_StateChanged(object sender, EventArgs e)
+        {
+            Control control = sender as Control;
+            if (control != null)
+                control.Invalidate();
+        }
+
+        private void actionButton_Paint(object sender, PaintEventArgs e)
+        {
+            Button button = sender as Button;
+            ActionButtonVisualStyle style;
+            if (button == null || !actionButtonStyles.TryGetValue(button, out style))
+                return;
+
+            bool pointerInside = button.Enabled && button.ClientRectangle.Contains(button.PointToClient(Cursor.Position));
+            bool pressed = pointerInside && (Control.MouseButtons & MouseButtons.Left) == MouseButtons.Left;
+            Color background = button.Enabled
+                ? (pressed ? BlendUiColor(style.Background, Color.White, style.Secondary ? 0.13F : 0.07F)
+                    : pointerInside ? BlendUiColor(style.Background, Color.White, style.Secondary ? 0.08F : 0.04F)
+                    : style.Background)
+                : Color.FromArgb(38, 38, 38);
+            Color foreground = button.Enabled ? style.Foreground : Color.FromArgb(126, 126, 126);
+
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.Clear(button.Parent == null ? UiSurface : button.Parent.BackColor);
+            Rectangle bounds = new Rectangle(0, 0, Math.Max(1, button.Width - 1), Math.Max(1, button.Height - 1));
+            using (GraphicsPath path = CreateRoundedPath(bounds, 9))
+            using (SolidBrush brush = new SolidBrush(background))
+                e.Graphics.FillPath(brush, path);
+
+            DrawActionButtonContents(e.Graphics, button, bounds, foreground);
+            e.Graphics.SmoothingMode = SmoothingMode.Default;
+        }
+
+        private static void DrawActionButtonContents(Graphics graphics, Button button, Rectangle bounds, Color foreground)
+        {
+            string text = button.Text ?? string.Empty;
+            Size textSize = string.IsNullOrEmpty(text)
+                ? Size.Empty
+                : TextRenderer.MeasureText(graphics, text, button.Font, Size.Empty,
+                    TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+            int spacing = button.Image != null && textSize.Width > 0 ? 7 : 0;
+            int imageWidth = button.Image == null ? 0 : button.Image.Width;
+            int contentWidth = imageWidth + spacing + textSize.Width;
+            int contentLeft = bounds.Left + Math.Max(0, (bounds.Width - contentWidth) / 2);
+
+            if (button.Image != null)
+            {
+                Rectangle imageBounds = new Rectangle(contentLeft,
+                    bounds.Top + (bounds.Height - button.Image.Height) / 2,
+                    button.Image.Width, button.Image.Height);
+                DrawTintedImage(graphics, button.Image, imageBounds, foreground);
+                contentLeft += imageWidth + spacing;
+            }
+
+            if (textSize.Width > 0)
+            {
+                Rectangle textBounds = new Rectangle(contentLeft, bounds.Top,
+                    Math.Max(0, bounds.Right - contentLeft), bounds.Height);
+                TextRenderer.DrawText(graphics, text, button.Font, textBounds, foreground,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
+                    TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+            }
+        }
+
+        private static void DrawTintedImage(Graphics graphics, Image image, Rectangle bounds, Color color)
+        {
+            float red = color.R / 255F;
+            float green = color.G / 255F;
+            float blue = color.B / 255F;
+            ColorMatrix matrix = new ColorMatrix(new[]
+            {
+                new[] { 0F, 0F, 0F, 0F, 0F },
+                new[] { 0F, 0F, 0F, 0F, 0F },
+                new[] { 0F, 0F, 0F, 0F, 0F },
+                new[] { 0F, 0F, 0F, 1F, 0F },
+                new[] { red, green, blue, 0F, 1F }
+            });
+            using (ImageAttributes attributes = new ImageAttributes())
+            {
+                attributes.SetColorMatrix(matrix);
+                graphics.DrawImage(image, bounds, 0, 0, image.Width, image.Height, GraphicsUnit.Pixel, attributes);
+            }
+        }
+
+        private static Color BlendUiColor(Color source, Color target, float amount)
+        {
+            amount = Math.Max(0F, Math.Min(1F, amount));
+            return Color.FromArgb(
+                source.A,
+                (int)(source.R + (target.R - source.R) * amount),
+                (int)(source.G + (target.G - source.G) * amount),
+                (int)(source.B + (target.B - source.B) * amount));
         }
 
         private void StyleCompactCheckBox(CheckBox checkBox)
@@ -1314,30 +1448,11 @@ namespace wumgr
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         }
 
-        private void disabledActionButton_Paint(object sender, PaintEventArgs e)
+        private sealed class ActionButtonVisualStyle
         {
-            Button button = sender as Button;
-            if (button == null || button.Enabled)
-                return;
-
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            Rectangle bounds = new Rectangle(0, 0, Math.Max(1, button.Width - 1), Math.Max(1, button.Height - 1));
-            using (GraphicsPath backgroundPath = CreateRoundedPath(bounds, 9))
-            using (SolidBrush brush = new SolidBrush(Color.FromArgb(37, 37, 37)))
-                e.Graphics.FillPath(brush, backgroundPath);
-
-            Rectangle textBounds = new Rectangle(8, 0, Math.Max(0, bounds.Width - 16), bounds.Height);
-            if (button.Image != null)
-            {
-                int imageY = (bounds.Height - button.Image.Height) / 2;
-                ControlPaint.DrawImageDisabled(e.Graphics, button.Image, 9, imageY, Color.FromArgb(37, 37, 37));
-                textBounds.X += button.Image.Width + 4;
-                textBounds.Width -= button.Image.Width + 4;
-            }
-
-            TextRenderer.DrawText(e.Graphics, button.Text, button.Font, textBounds, Color.FromArgb(126, 126, 126),
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-            e.Graphics.SmoothingMode = SmoothingMode.Default;
+            public Color Background;
+            public Color Foreground;
+            public bool Secondary;
         }
 
         private void PopulateHistoryPreview()
@@ -2388,6 +2503,7 @@ namespace wumgr
         {
             modernSettingsVisible = true;
             packageUpdatesVisible = false;
+            otaUpdatesVisible = false;
             suspendChange = true;
             btnWinUpd.Checked = false;
             btnInstalled.Checked = false;
@@ -2398,6 +2514,8 @@ namespace wumgr
                 modernSettingsButton.Checked = true;
             if (modernPackageUpdatesButton != null)
                 modernPackageUpdatesButton.Checked = false;
+            if (modernOtaUpdatesButton != null)
+                modernOtaUpdatesButton.Checked = false;
             UpdateModernPage();
             UpdateModernEmptyState();
         }
@@ -2406,10 +2524,13 @@ namespace wumgr
         {
             modernSettingsVisible = false;
             packageUpdatesVisible = false;
+            otaUpdatesVisible = false;
             if (modernSettingsButton != null)
                 modernSettingsButton.Checked = false;
             if (modernPackageUpdatesButton != null)
                 modernPackageUpdatesButton.Checked = false;
+            if (modernOtaUpdatesButton != null)
+                modernOtaUpdatesButton.Checked = false;
             UpdateModernPage();
             UpdateModernEmptyState();
         }
@@ -2432,6 +2553,19 @@ namespace wumgr
                 }
                 if (modernPackageUpdatesPage != null)
                     modernPackageUpdatesPage.Visible = false;
+                if (modernOtaUpdatesPage != null)
+                    modernOtaUpdatesPage.Visible = false;
+                return;
+            }
+
+            if (otaUpdatesVisible)
+            {
+                modernPageTitle.Text = "Actualizaciones de WinSlim (OTAs)";
+                modernPageSubtitle.Text = "Consulta las OTAs publicadas en GitHub posteriores a la versión instalada.";
+                if (modernUpdatePage != null) modernUpdatePage.Visible = false;
+                if (modernSettingsPage != null) modernSettingsPage.Visible = false;
+                if (modernPackageUpdatesPage != null) modernPackageUpdatesPage.Visible = false;
+                if (modernOtaUpdatesPage != null) { modernOtaUpdatesPage.Visible = true; modernOtaUpdatesPage.BringToFront(); }
                 return;
             }
 
@@ -2448,6 +2582,8 @@ namespace wumgr
                     modernPackageUpdatesPage.Visible = true;
                     modernPackageUpdatesPage.BringToFront();
                 }
+                if (modernOtaUpdatesPage != null)
+                    modernOtaUpdatesPage.Visible = false;
                 return;
             }
 
@@ -2455,6 +2591,8 @@ namespace wumgr
                 modernSettingsPage.Visible = false;
             if (modernPackageUpdatesPage != null)
                 modernPackageUpdatesPage.Visible = false;
+            if (modernOtaUpdatesPage != null)
+                modernOtaUpdatesPage.Visible = false;
             if (modernUpdatePage != null)
             {
                 modernUpdatePage.Visible = true;

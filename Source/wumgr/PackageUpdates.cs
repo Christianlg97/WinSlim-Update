@@ -202,6 +202,20 @@ namespace wumgr
             button.TextAlign = ContentAlignment.MiddleLeft;
             button.Cursor = Cursors.Hand;
             button.UseVisualStyleBackColor = false;
+            button.Paint += packageSelectionToggle_Paint;
+        }
+
+        private void packageSelectionToggle_Paint(object sender, PaintEventArgs e)
+        {
+            Button button = sender as Button;
+            if (button == null || button.Enabled)
+                return;
+
+            e.Graphics.Clear(UiSurface);
+            TextRenderer.DrawText(e.Graphics, button.Text, button.Font, button.ClientRectangle,
+                Color.FromArgb(126, 126, 126),
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
+                TextFormatFlags.NoPrefix);
         }
 
         private Control BuildPackageListSurface()
@@ -289,6 +303,7 @@ namespace wumgr
         private void ShowPackageUpdatesPage()
         {
             packageUpdatesVisible = true;
+            otaUpdatesVisible = false;
             modernSettingsVisible = false;
             suspendChange = true;
             btnWinUpd.Checked = false;
@@ -300,6 +315,8 @@ namespace wumgr
                 modernSettingsButton.Checked = false;
             if (modernPackageUpdatesButton != null)
                 modernPackageUpdatesButton.Checked = true;
+            if (modernOtaUpdatesButton != null)
+                modernOtaUpdatesButton.Checked = false;
             UpdateModernPage();
 
             if (!packageUpdatesLoaded && !packageOperationBusy)
@@ -601,7 +618,11 @@ namespace wumgr
             if (packageUpdateSelectedButton != null)
                 packageUpdateSelectedButton.Enabled = !busy && packageUpdates.Any(item => item.Selected);
             if (packageFilter != null)
-                packageFilter.Enabled = !busy;
+            {
+                packageFilter.ReadOnly = busy;
+                packageFilter.BackColor = UiInput;
+                packageFilter.ForeColor = busy ? UiMuted : UiText;
+            }
             if (packageSelectAllButton != null)
                 packageSelectAllButton.Enabled = !busy;
             if (packageGroupBySourceButton != null)
