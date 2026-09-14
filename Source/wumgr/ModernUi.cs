@@ -30,7 +30,19 @@ namespace wumgr
         private Label modernEditionLabel;
         private Label modernActionHint;
         private TableLayoutPanel modernSelectionGrid;
+        private TableLayoutPanel modernUpdatePageLayout;
+        private TableLayoutPanel modernUpdateToolsLayout;
+        private Control modernUpdateToolsSurface;
         private Control modernFilterSurface;
+        private Button modernCategoryFilterButton;
+        private Button modernSearchToggleButton;
+        private ToolStripDropDown modernCategoryFilterMenu;
+        private readonly Dictionary<Button, string> modernCategoryFilterButtons =
+            new Dictionary<Button, string>();
+        private DateTime modernCategoryFilterClosedAt = DateTime.MinValue;
+        private const int ModernCategoryFilterMenuHeight = 232;
+        private string modernCategoryFilter = string.Empty;
+        private bool modernSearchToolsVisible;
         private Button modernLogButton;
         private Panel modernOptionsPage;
         private Panel modernControlPage;
@@ -77,6 +89,7 @@ namespace wumgr
         private void InitializeModernUi()
         {
             SuspendLayout();
+            otaFeatureAvailable = HasOtaManifestRegistration();
 
             Text = "WinSlim Update";
             BackColor = UiBackground;
@@ -377,7 +390,7 @@ namespace wumgr
 
             Panel brand = new Panel();
             brand.Dock = DockStyle.Top;
-            brand.Height = 92;
+            brand.Height = 106;
             brand.BackColor = UiSidebar;
 
             UpdateLogoMark mark = new UpdateLogoMark();
@@ -392,9 +405,11 @@ namespace wumgr
             caption.Location = new Point(49, 29);
             caption.AutoSize = true;
 
-            modernEditionLabel = CreateLabel("Windows 10 / 11", 8.2F, FontStyle.Regular, UiMuted);
-            modernEditionLabel.Location = new Point(2, 58);
-            modernEditionLabel.AutoSize = true;
+            modernEditionLabel = CreateLabel("ACTUALIZACIONES DE LA BASE WINDOWS", 8F, FontStyle.Bold, UiMuted);
+            modernEditionLabel.Location = new Point(8, 72);
+            modernEditionLabel.AutoSize = false;
+            modernEditionLabel.Size = new Size(190, 28);
+            modernEditionLabel.TextAlign = ContentAlignment.MiddleLeft;
 
             brand.Controls.Add(mark);
             brand.Controls.Add(product);
@@ -426,17 +441,21 @@ namespace wumgr
             StyleNavigationButton(modernPackageUpdatesButton);
             modernPackageUpdatesButton.Size = new Size(190, 50);
             modernPackageUpdatesButton.Font = new Font("Segoe UI", 8.8F, FontStyle.Regular);
-            Label otaCaption = CreateLabel("WinSlim OTAs", 8F, FontStyle.Bold, UiMuted);
-            otaCaption.AutoSize = false;
-            otaCaption.Size = new Size(190, 28);
-            otaCaption.Margin = new Padding(8, 2, 8, 0);
-            otaCaption.TextAlign = ContentAlignment.MiddleLeft;
-            modernOtaUpdatesButton = new CheckBox();
-            modernOtaUpdatesButton.Name = "modernOtaUpdatesButton";
-            modernOtaUpdatesButton.Text = "Actualizaciones de\r\nWinSlim";
-            StyleNavigationButton(modernOtaUpdatesButton);
-            modernOtaUpdatesButton.Size = new Size(190, 50);
-            modernOtaUpdatesButton.Font = new Font("Segoe UI", 8.8F, FontStyle.Regular);
+            Label otaCaption = null;
+            if (otaFeatureAvailable)
+            {
+                otaCaption = CreateLabel("WINSLIM OTAS", 8F, FontStyle.Bold, UiMuted);
+                otaCaption.AutoSize = false;
+                otaCaption.Size = new Size(190, 28);
+                otaCaption.Margin = new Padding(8, 2, 8, 0);
+                otaCaption.TextAlign = ContentAlignment.MiddleLeft;
+                modernOtaUpdatesButton = new CheckBox();
+                modernOtaUpdatesButton.Name = "modernOtaUpdatesButton";
+                modernOtaUpdatesButton.Text = "Actualizaciones de\r\nWinSlim";
+                StyleNavigationButton(modernOtaUpdatesButton);
+                modernOtaUpdatesButton.Size = new Size(190, 50);
+                modernOtaUpdatesButton.Font = new Font("Segoe UI", 8.8F, FontStyle.Regular);
+            }
             modernSettingsButton = new CheckBox();
             modernSettingsButton.Name = "modernSettingsButton";
             modernSettingsButton.Text = "Configuración";
@@ -453,8 +472,11 @@ namespace wumgr
             navigation.Controls.Add(btnHistory);
             navigation.Controls.Add(packagesCaption);
             navigation.Controls.Add(modernPackageUpdatesButton);
-            navigation.Controls.Add(otaCaption);
-            navigation.Controls.Add(modernOtaUpdatesButton);
+            if (otaFeatureAvailable)
+            {
+                navigation.Controls.Add(otaCaption);
+                navigation.Controls.Add(modernOtaUpdatesButton);
+            }
             navigation.Controls.Add(settingsCaption);
             navigation.Controls.Add(modernSettingsButton);
             Panel footer = new Panel();
@@ -497,9 +519,11 @@ namespace wumgr
             modernUpdatePage = BuildUpdatesPage();
             modernSettingsPage = BuildSettingsPage();
             modernPackageUpdatesPage = BuildPackageUpdatesPage();
-            modernOtaUpdatesPage = BuildOtaUpdatesPage();
+            if (otaFeatureAvailable)
+                modernOtaUpdatesPage = BuildOtaUpdatesPage();
             contentHost.Controls.Add(modernSettingsPage);
-            contentHost.Controls.Add(modernOtaUpdatesPage);
+            if (modernOtaUpdatesPage != null)
+                contentHost.Controls.Add(modernOtaUpdatesPage);
             contentHost.Controls.Add(modernPackageUpdatesPage);
             contentHost.Controls.Add(modernUpdatePage);
 
@@ -511,6 +535,7 @@ namespace wumgr
         private Panel BuildUpdatesPage()
         {
             TableLayoutPanel page = new TableLayoutPanel();
+            modernUpdatePageLayout = page;
             page.Dock = DockStyle.Fill;
             page.Margin = Padding.Empty;
             page.Padding = Padding.Empty;
@@ -519,7 +544,7 @@ namespace wumgr
             page.RowCount = 4;
             page.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             page.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
-            page.RowStyles.Add(new RowStyle(SizeType.Absolute, 62F));
+            page.RowStyles.Add(new RowStyle(SizeType.Absolute, 0F));
             page.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
             page.RowStyles.Add(new RowStyle(SizeType.Absolute, 76F));
             page.Controls.Add(BuildActionBar(), 0, 0);
@@ -612,41 +637,73 @@ namespace wumgr
         private Control BuildSelectionBar()
         {
             RoundedPanel surface = new RoundedPanel();
+            modernUpdateToolsSurface = surface;
             surface.Dock = DockStyle.Fill;
             surface.Margin = new Padding(28, 0, 28, 8);
-            surface.Padding = new Padding(10, 8, 10, 8);
+            surface.Padding = new Padding(10, 7, 10, 7);
             surface.BackColor = UiSurface;
             surface.BorderColor = UiBorder;
             surface.CornerRadius = 10;
+            surface.Visible = false;
 
             TableLayoutPanel selection = new TableLayoutPanel();
-            modernSelectionGrid = selection;
+            modernUpdateToolsLayout = selection;
+            modernSelectionGrid = null;
             selection.Dock = DockStyle.Fill;
             selection.Margin = Padding.Empty;
             selection.Padding = Padding.Empty;
             selection.BackColor = UiSurface;
-            selection.ColumnCount = 4;
-            selection.RowCount = 1;
-            selection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150F));
-            selection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 94F));
+            selection.ColumnCount = 1;
+            selection.RowCount = 3;
             selection.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            selection.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 148F));
+            selection.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
+            selection.RowStyles.Add(new RowStyle(SizeType.Absolute, 38F));
+            selection.RowStyles.Add(new RowStyle(SizeType.Absolute, 0F));
 
-            StyleCompactCheckBox(chkAll);
-            chkAll.Text = "Seleccionar todo";
-            StyleCompactCheckBox(chkGrupe);
-            chkGrupe.Text = "Agrupar";
+            FlowLayoutPanel primaryTools = CreateUpdateToolsRow();
+            modernCategoryFilterButton = CreateUpdateToolButton("\uE71C", 42);
+            modernCategoryFilterButton.Font = new Font("Segoe Fluent Icons", 12F, FontStyle.Regular);
+            toolTip.SetToolTip(modernCategoryFilterButton, "Filtrar actualizaciones");
+            modernCategoryFilterButton.Click += delegate { ShowUpdateCategoryFilterMenu(); };
+            Button selectAllButton = CreateUpdateToolButton("Marcar todo", 112);
+            selectAllButton.Click += delegate { SelectPendingUpdatesByCategory(null); };
+            Button downloadAllButton = CreateUpdateToolButton("Aplicar todas las actualizaciones", 224);
+            downloadAllButton.Click += delegate { ApplyAllPendingUpdates(); };
+            modernSearchToggleButton = CreateUpdateToolButton("\uE721", 42);
+            modernSearchToggleButton.Font = new Font("Segoe Fluent Icons", 12F, FontStyle.Regular);
+            toolTip.SetToolTip(modernSearchToggleButton, "Buscar entre las actualizaciones encontradas");
+            modernSearchToggleButton.Click += delegate { ToggleModernUpdateSearch(); };
+            primaryTools.Controls.Add(modernCategoryFilterButton);
+            primaryTools.Controls.Add(selectAllButton);
+            primaryTools.Controls.Add(downloadAllButton);
+            primaryTools.Controls.Add(modernSearchToggleButton);
 
-            txtFilter.Dock = DockStyle.Fill;
-            txtFilter.Margin = new Padding(12, 6, 4, 6);
+            FlowLayoutPanel categoryTools = CreateUpdateToolsRow();
+            Button driversButton = CreateUpdateToolButton("Solo controladores", 146);
+            driversButton.Click += delegate { SelectPendingUpdatesByCategory("Controladores"); };
+            Button componentsButton = CreateUpdateToolButton("Solo componentes y .NET", 180);
+            componentsButton.Click += delegate { SelectPendingUpdatesByCategory(".NET y componentes"); };
+            Button definitionsButton = CreateUpdateToolButton("Solo definiciones", 140);
+            definitionsButton.Click += delegate { SelectPendingUpdatesByCategory("Definiciones de seguridad"); };
+            Button windowsSecurityButton = CreateUpdateToolButton("Solo seguridad de Windows", 184);
+            windowsSecurityButton.Click += delegate { SelectPendingUpdatesByCategory("Seguridad de Windows"); };
+            categoryTools.Controls.Add(driversButton);
+            categoryTools.Controls.Add(componentsButton);
+            categoryTools.Controls.Add(definitionsButton);
+            categoryTools.Controls.Add(windowsSecurityButton);
+
+            txtFilter.Dock = DockStyle.None;
+            txtFilter.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            txtFilter.Margin = new Padding(12, 0, 4, 0);
             txtFilter.AutoSize = false;
+            txtFilter.Height = 22;
             txtFilter.BorderStyle = BorderStyle.None;
             txtFilter.Font = new Font("Segoe UI", 10F);
             txtFilter.BackColor = UiInput;
             txtFilter.ForeColor = UiText;
             txtFilter.HandleCreated += delegate
             {
-                SendTextMessage(txtFilter.Handle, 0x1501, new IntPtr(1), "Filtrar actualizaciones");
+                SendTextMessage(txtFilter.Handle, 0x1501, new IntPtr(1), "Buscar actualización encontrada");
             };
 
             RoundedPanel filterSurface = new RoundedPanel();
@@ -675,20 +732,233 @@ namespace wumgr
             filterLayout.Controls.Add(txtFilter, 0, 0);
             filterLayout.Controls.Add(filterIcon, 1, 0);
             filterSurface.Controls.Add(filterLayout);
+            filterSurface.Margin = new Padding(2, 2, 2, 1);
+            filterSurface.Visible = false;
 
             btnSearchOff.Visible = false;
+            chkAll.Visible = false;
+            chkGrupe.Visible = false;
 
-            modernSelectionSummary = CreateLabel("0 seleccionadas", 9F, FontStyle.Regular, UiMuted);
-            modernSelectionSummary.Dock = DockStyle.Fill;
-            modernSelectionSummary.TextAlign = ContentAlignment.MiddleRight;
-            modernSelectionSummary.Visible = true;
+            modernSelectionSummary = CreateLabel(string.Empty, 9F, FontStyle.Regular, UiMuted);
+            modernSelectionSummary.Visible = false;
 
-            selection.Controls.Add(chkAll, 0, 0);
-            selection.Controls.Add(chkGrupe, 1, 0);
-            selection.Controls.Add(filterSurface, 2, 0);
-            selection.Controls.Add(modernSelectionSummary, 3, 0);
+            BuildUpdateCategoryFilterMenu();
+            selection.Controls.Add(primaryTools, 0, 0);
+            selection.Controls.Add(categoryTools, 0, 1);
+            selection.Controls.Add(filterSurface, 0, 2);
             surface.Controls.Add(selection);
             return surface;
+        }
+
+        private FlowLayoutPanel CreateUpdateToolsRow()
+        {
+            FlowLayoutPanel row = new FlowLayoutPanel();
+            row.Dock = DockStyle.Fill;
+            row.Margin = Padding.Empty;
+            row.Padding = Padding.Empty;
+            row.WrapContents = false;
+            row.FlowDirection = FlowDirection.LeftToRight;
+            row.BackColor = UiSurface;
+            return row;
+        }
+
+        private Button CreateUpdateToolButton(string text, int width)
+        {
+            Button button = new Button();
+            StyleSecondaryActionButton(button, text, UiText);
+            button.Width = width;
+            button.Height = 32;
+            button.Margin = new Padding(0, 0, 7, 4);
+            button.Font = new Font("Segoe UI Semibold", 8.6F, FontStyle.Bold);
+            return button;
+        }
+
+        private void BuildUpdateCategoryFilterMenu()
+        {
+            modernCategoryFilterMenu = new ToolStripDropDown();
+            modernCategoryFilterMenu.AutoSize = false;
+            modernCategoryFilterMenu.Padding = Padding.Empty;
+            modernCategoryFilterMenu.Margin = Padding.Empty;
+            modernCategoryFilterMenu.BackColor = Color.Transparent;
+            modernCategoryFilterMenu.DropShadowEnabled = true;
+
+            RoundedPanel menuSurface = new RoundedPanel();
+            menuSurface.Size = new Size(252, ModernCategoryFilterMenuHeight);
+            menuSurface.Padding = new Padding(8);
+            menuSurface.BackColor = UiSurface;
+            menuSurface.BorderColor = UiBorder;
+            menuSurface.CornerRadius = 12;
+
+            FlowLayoutPanel menuItems = new FlowLayoutPanel();
+            menuItems.Dock = DockStyle.Fill;
+            menuItems.Margin = Padding.Empty;
+            menuItems.Padding = Padding.Empty;
+            menuItems.FlowDirection = FlowDirection.TopDown;
+            menuItems.WrapContents = false;
+            menuItems.BackColor = UiSurface;
+            AddUpdateCategoryFilterItem(menuItems, "Todas las actualizaciones", string.Empty);
+            AddUpdateCategoryFilterItem(menuItems, "Solo controladores", "Controladores");
+            AddUpdateCategoryFilterItem(menuItems, "Actualizaciones de seguridad", "Actualizaciones de seguridad");
+            AddUpdateCategoryFilterItem(menuItems, "Componentes y .NET", ".NET y componentes");
+            AddUpdateCategoryFilterItem(menuItems, "Definiciones de seguridad", "Definiciones de seguridad");
+            AddUpdateCategoryFilterItem(menuItems, "Seguridad de Windows", "Seguridad de Windows");
+            menuSurface.Controls.Add(menuItems);
+
+            ToolStripControlHost host = new ToolStripControlHost(menuSurface);
+            host.AutoSize = false;
+            host.Size = menuSurface.Size;
+            host.Margin = Padding.Empty;
+            host.Padding = Padding.Empty;
+            modernCategoryFilterMenu.Items.Add(host);
+            modernCategoryFilterMenu.Closed += delegate
+            {
+                modernCategoryFilterClosedAt = DateTime.UtcNow;
+            };
+        }
+
+        private void AddUpdateCategoryFilterItem(Control parent, string text, string category)
+        {
+            Button item = CreateUpdateToolButton(text, 232);
+            item.Height = 32;
+            item.Margin = new Padding(0, 0, 0, 4);
+            item.TextAlign = ContentAlignment.MiddleLeft;
+            item.Padding = new Padding(12, 0, 8, 0);
+            item.Click += updateCategoryFilterItem_Click;
+            modernCategoryFilterButtons[item] = category;
+            parent.Controls.Add(item);
+        }
+
+        private void updateCategoryFilterItem_Click(object sender, EventArgs e)
+        {
+            Button item = sender as Button;
+            string category;
+            if (item == null || !modernCategoryFilterButtons.TryGetValue(item, out category))
+                return;
+            modernCategoryFilter = category;
+            modernCategoryFilterMenu.Close();
+            LoadList(agent.mPendingUpdates);
+        }
+
+        private void ShowUpdateCategoryFilterMenu()
+        {
+            if (modernCategoryFilterMenu == null || modernCategoryFilterButton == null)
+                return;
+
+            if (modernCategoryFilterMenu.Visible)
+            {
+                modernCategoryFilterMenu.Close();
+                return;
+            }
+
+            if ((DateTime.UtcNow - modernCategoryFilterClosedAt).TotalMilliseconds < 180)
+                return;
+
+            foreach (KeyValuePair<Button, string> entry in modernCategoryFilterButtons)
+                entry.Key.Text = string.Equals(entry.Value, modernCategoryFilter, StringComparison.OrdinalIgnoreCase)
+                    ? "✓  " + GetUpdateCategoryFilterLabel(entry.Value)
+                    : GetUpdateCategoryFilterLabel(entry.Value);
+
+            modernCategoryFilterMenu.Size = new Size(252, ModernCategoryFilterMenuHeight);
+            modernCategoryFilterMenu.Show(modernCategoryFilterButton, new Point(0, modernCategoryFilterButton.Height));
+            SetCategoryFilterMenuRegion();
+        }
+
+        private static string GetUpdateCategoryFilterLabel(string category)
+        {
+            if (string.IsNullOrEmpty(category)) return "Todas las actualizaciones";
+            if (category == "Controladores") return "Solo controladores";
+            if (category == ".NET y componentes") return "Componentes y .NET";
+            return category;
+        }
+
+        private void SetCategoryFilterMenuRegion()
+        {
+            Region previous = modernCategoryFilterMenu.Region;
+            using (GraphicsPath path = CreateRoundedPath(
+                new Rectangle(0, 0, modernCategoryFilterMenu.Width, modernCategoryFilterMenu.Height), 12))
+                modernCategoryFilterMenu.Region = new Region(path);
+            if (previous != null)
+                previous.Dispose();
+        }
+
+        private void ToggleModernUpdateSearch()
+        {
+            modernSearchToolsVisible = !modernSearchToolsVisible;
+            if (modernFilterSurface != null)
+                modernFilterSurface.Visible = modernSearchToolsVisible;
+            if (modernUpdateToolsLayout != null)
+                modernUpdateToolsLayout.RowStyles[2].Height = modernSearchToolsVisible ? 34F : 0F;
+            if (modernUpdatePageLayout != null)
+                modernUpdatePageLayout.RowStyles[1].Height = modernSearchToolsVisible ? 136F : 102F;
+            toolTip.SetToolTip(modernSearchToggleButton, modernSearchToolsVisible
+                ? "Ocultar búsqueda"
+                : "Buscar entre las actualizaciones encontradas");
+            if (modernSearchToolsVisible)
+            {
+                txtFilter.Focus();
+                txtFilter.SelectAll();
+            }
+            else
+            {
+                txtFilter.Text = string.Empty;
+                mSearchFilter = null;
+                bUpdateList = false;
+                LoadList(agent.mPendingUpdates);
+            }
+        }
+
+        private void SelectPendingUpdatesByCategory(string category)
+        {
+            ResetModernPendingFilters();
+            foreach (ListViewItem item in updateItems)
+            {
+                MsUpdate update = item.Tag as MsUpdate;
+                item.Checked = update != null && (category == null || UpdateMatchesModernCategory(update, category));
+            }
+            SyncModernUpdateList();
+            UpdateState();
+        }
+
+        private void ApplyAllPendingUpdates()
+        {
+            SelectPendingUpdatesByCategory(null);
+            if (GetCheckedItemCount() > 0)
+                btnInstall.PerformClick();
+        }
+
+        private void ResetModernPendingFilters()
+        {
+            modernCategoryFilter = string.Empty;
+            txtFilter.Text = string.Empty;
+            mSearchFilter = null;
+            bUpdateList = false;
+            LoadList(agent.mPendingUpdates);
+        }
+
+        private static bool UpdateMatchesModernCategory(MsUpdate update, string category)
+        {
+            string displayCategory = GetDisplayCategory(update);
+            if (string.Equals(displayCategory, category, StringComparison.CurrentCultureIgnoreCase))
+                return true;
+            if (string.Equals(category, ".NET y componentes", StringComparison.OrdinalIgnoreCase))
+            {
+                string combined = (update.Title ?? string.Empty) + " " + (update.Category ?? string.Empty);
+                return combined.IndexOf(".NET", StringComparison.OrdinalIgnoreCase) >= 0
+                    || combined.IndexOf("componente", StringComparison.CurrentCultureIgnoreCase) >= 0
+                    || combined.IndexOf("component", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+            return false;
+        }
+
+        private void UpdateModernUpdateToolsVisibility()
+        {
+            if (modernUpdateToolsSurface == null || modernUpdatePageLayout == null)
+                return;
+            bool visible = CurrentList == UpdateLists.PendingUpdates && agent != null && agent.mPendingUpdates.Count > 0;
+            modernUpdateToolsSurface.Visible = visible;
+            modernUpdatePageLayout.RowStyles[1].Height = visible
+                ? (modernSearchToolsVisible ? 136F : 102F)
+                : 0F;
         }
 
         private Control BuildUpdateSurface()
@@ -1235,7 +1505,10 @@ namespace wumgr
             int spacing = button.Image != null && textSize.Width > 0 ? 7 : 0;
             int imageWidth = button.Image == null ? 0 : button.Image.Width;
             int contentWidth = imageWidth + spacing + textSize.Width;
-            int contentLeft = bounds.Left + Math.Max(0, (bounds.Width - contentWidth) / 2);
+            bool alignLeft = button.TextAlign == ContentAlignment.MiddleLeft;
+            int contentLeft = alignLeft
+                ? bounds.Left + Math.Max(8, button.Padding.Left)
+                : bounds.Left + Math.Max(0, (bounds.Width - contentWidth) / 2);
 
             if (button.Image != null)
             {
@@ -2644,6 +2917,7 @@ namespace wumgr
                     new TableLayoutPanelCellPosition(CurrentList == UpdateLists.UpdateHistory ? 1 : 2, 0));
                 modernSelectionGrid.SetColumnSpan(modernFilterSurface, CurrentList == UpdateLists.UpdateHistory ? 2 : 1);
             }
+            UpdateModernUpdateToolsVisibility();
         }
 
         private void UpdateModernSelectionSummary()

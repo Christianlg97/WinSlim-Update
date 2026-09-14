@@ -36,6 +36,7 @@ namespace wumgr
         private Label otaStatusLabel;
         private ModernProgressBar otaProgress;
         private CancellationTokenSource otaCancellation;
+        private bool otaFeatureAvailable;
         private bool otaUpdatesVisible;
         private bool otaUpdatesLoaded;
         private bool otaOperationBusy;
@@ -172,6 +173,11 @@ namespace wumgr
 
         private void ShowOtaUpdatesPage()
         {
+            if (!otaFeatureAvailable || !HasOtaManifestRegistration())
+            {
+                otaUpdatesVisible = false;
+                return;
+            }
             otaUpdatesVisible = true;
             packageUpdatesVisible = false;
             modernSettingsVisible = false;
@@ -457,19 +463,46 @@ namespace wumgr
 
         private static string ReadInstalledOtaTag()
         {
+            string tag;
+            return TryReadRegisteredOtaTag(out tag) ? tag : string.Empty;
+        }
+
+        private static bool HasOtaManifestRegistration()
+        {
+            string ignored;
+            return TryReadRegisteredOtaTag(out ignored);
+        }
+
+        private static bool TryReadRegisteredOtaTag(out string tag)
+        {
+            tag = string.Empty;
             RegistryView[] views = Environment.Is64BitOperatingSystem
                 ? new[] { RegistryView.Registry64, RegistryView.Registry32 }
                 : new[] { RegistryView.Registry32 };
             foreach (RegistryView view in views)
             {
-                using (RegistryKey baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view))
-                using (RegistryKey key = baseKey.OpenSubKey(OtaRegistryPath, false))
+                try
                 {
-                    object value = key == null ? null : key.GetValue(OtaRegistryValue, null, RegistryValueOptions.DoNotExpandEnvironmentNames);
-                    if (value != null && !string.IsNullOrWhiteSpace(value.ToString())) return value.ToString().Trim();
+                    using (RegistryKey baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view))
+                    using (RegistryKey key = baseKey.OpenSubKey(OtaRegistryPath, false))
+                    {
+                        if (key == null || !key.GetValueNames().Any(name =>
+                            string.Equals(name, OtaRegistryValue, StringComparison.OrdinalIgnoreCase)))
+                            continue;
+                        if (key.GetValueKind(OtaRegistryValue) != RegistryValueKind.String)
+                            continue;
+                        object value = key.GetValue(OtaRegistryValue, string.Empty,
+                            RegistryValueOptions.DoNotExpandEnvironmentNames);
+                        tag = value == null ? string.Empty : value.ToString().Trim();
+                        return true;
+                    }
+                }
+                catch (Exception exception)
+                {
+                    AppLog.Line("No se pudo comprobar el registro de WinSlim OTA ({0}): {1}", view, exception.Message);
                 }
             }
-            return string.Empty;
+            return false;
         }
     }
 

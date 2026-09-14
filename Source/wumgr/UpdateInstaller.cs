@@ -111,6 +111,12 @@ namespace wumgr
             mThread.Join();
             mThread = null;
 
+            MsUpdate completedUpdate = mUpdates != null && mCurrentTask >= 0 && mCurrentTask < mUpdates.Count
+                ? mUpdates[mCurrentTask]
+                : null;
+            if (completedUpdate != null && ItemFinished != null)
+                ItemFinished(this, new ItemFinishedEventArgs(completedUpdate, success, reboot));
+
             mCurrentTask++;
             NextUpdate();
         }
@@ -337,6 +343,21 @@ namespace wumgr
             public bool Success { get { return ErrorCount == 0; } }
         }
         public event EventHandler<FinishedEventArgs> Finished;
+
+        public sealed class ItemFinishedEventArgs : EventArgs
+        {
+            public ItemFinishedEventArgs(MsUpdate update, bool success, bool reboot)
+            {
+                Update = update;
+                Success = success;
+                Reboot = reboot;
+            }
+            public MsUpdate Update { get; private set; }
+            public bool Success { get; private set; }
+            public bool Reboot { get; private set; }
+        }
+
+        public event EventHandler<ItemFinishedEventArgs> ItemFinished;
 
         public event EventHandler<WuAgent.ProgressArgs> Progress;
     }

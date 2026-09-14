@@ -65,8 +65,8 @@ namespace wumgr
             mStrings.Add("stat_reboot", "Requiere reinicio");
             mStrings.Add("op_check", "Buscando actualizaciones");
             mStrings.Add("op_prep", "Preparando la búsqueda");
-            mStrings.Add("op_dl", "Descargar actualizaciones");
-            mStrings.Add("op_inst", "Instalar actualizaciones");
+            mStrings.Add("op_dl", "Descargando actualizaciones");
+            mStrings.Add("op_inst", "Instalando actualizaciones");
             mStrings.Add("op_rem", "Desinstalar actualizaciones");
             mStrings.Add("op_cancel", "Cancelar la operación");
             mStrings.Add("op_unk", "Operación desconocida");

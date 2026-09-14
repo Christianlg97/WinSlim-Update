@@ -61,6 +61,7 @@ namespace wumgr
 
             mUpdateInstaller = new UpdateInstaller();
             mUpdateInstaller.Finished += InstallFinished;
+            mUpdateInstaller.ItemFinished += InstallItemFinished;
             mUpdateInstaller.Progress += InstallProgress;
 
             dlPath = Program.wrkPath + @"\Updates";
@@ -658,29 +659,7 @@ namespace wumgr
         void InstallFinished(object sender, UpdateInstaller.FinishedEventArgs args) // "manuall" mode
         {
             if (args.Success)
-            {
                 AppLog.Line("La operación con las actualizaciones se completó correctamente.");
-
-                foreach (MsUpdate Update in args.Updates)
-                {
-                    if (mCurOperation == AgentOperation.InstallingUpdates)
-                    {
-                        if (RemoveFrom(mPendingUpdates, Update))
-                        {
-                            Update.Attributes |= (int)MsUpdate.UpdateAttr.Installed;
-                            mInstalledUpdates.Add(Update);
-                        }
-                    }
-                    else if (mCurOperation == AgentOperation.RemoveingUpdates)
-                    {
-                        if (RemoveFrom(mInstalledUpdates, Update))
-                        {
-                            Update.Attributes &= ~(int)MsUpdate.UpdateAttr.Installed;
-                            mPendingUpdates.Add(Update);
-                        }
-                    }
-                }
-            }
             else
                 AppLog.Line("Algunas actualizaciones no se pudieron procesar.");
 
@@ -693,6 +672,31 @@ namespace wumgr
             if (mCurOperation == AgentOperation.CancelingOperation)
                 ret = RetCodes.Abborted;
             OnFinished(ret, args.Reboot);
+        }
+
+        void InstallItemFinished(object sender, UpdateInstaller.ItemFinishedEventArgs args)
+        {
+            if (!args.Success || args.Update == null)
+                return;
+
+            if (mCurOperation == AgentOperation.InstallingUpdates)
+            {
+                if (RemoveFrom(mPendingUpdates, args.Update))
+                {
+                    args.Update.Attributes |= (int)MsUpdate.UpdateAttr.Installed;
+                    mInstalledUpdates.Add(args.Update);
+                }
+            }
+            else if (mCurOperation == AgentOperation.RemoveingUpdates)
+            {
+                if (RemoveFrom(mInstalledUpdates, args.Update))
+                {
+                    args.Update.Attributes &= ~(int)MsUpdate.UpdateAttr.Installed;
+                    mPendingUpdates.Add(args.Update);
+                }
+            }
+
+            OnUpdatesChanged();
         }
 
         void InstallProgress(object sender, ProgressArgs args)

@@ -616,6 +616,10 @@ namespace wumgr
 
 
                 string displayCategory = GetDisplayCategory(Update);
+                if (CurrentList == UpdateLists.PendingUpdates &&
+                    !string.IsNullOrEmpty(modernCategoryFilter) &&
+                    !UpdateMatchesModernCategory(Update, modernCategoryFilter))
+                    continue;
                 string[] strings = new string[] {
                     Update.Title,
                     displayCategory,
@@ -685,6 +689,7 @@ namespace wumgr
             }
             updateItems.AddRange(items);
             SyncModernUpdateList();
+            UpdateModernUpdateToolsVisibility();
             UpdateModernEmptyState();
         }
 
