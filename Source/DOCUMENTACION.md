@@ -53,7 +53,7 @@ El proyecto parte de la base técnica de **WuMgr**, pero sustituye gran parte de
 | Arquitectura de compilación | Any CPU, sin preferencia por 32 bits |
 | Motor del sistema | Windows Update Agent mediante COM |
 | Motor de aplicaciones | WinGet CLI |
-| Motor de WinSlim OTAs | API de releases de GitHub |
+| Motor de WinSlim OTAs | `ota-manifest.json` del repositorio de OTAs, con la API de releases de GitHub como respaldo |
 | Elevación | Administrador obligatorio mediante manifiesto UAC |
 | Licencia principal | GNU GPL v3 |
 
@@ -159,7 +159,7 @@ flowchart TB
     Diagnostics --> ErrorModal["Modal de diagnóstico y reintento"]
 
     OtaPage --> Registry["OTAManifestVersion (REG_SZ)"]
-    OtaPage --> GitHub["Releases de WinSlim11_OTAs"]
+    OtaPage --> GitHub["ota-manifest.json / releases de WinSlim11_OTAs"]
     GitHub --> OtaInstaller["ZIP / Install_Update.exe"]
 
     Settings --> GPO["Registro, directivas y servicios auxiliares"]
@@ -309,18 +309,25 @@ Solo se aceptan tags con el formato exacto `WS11OTA_X.Y.Z`. La comparación es n
 
 Por ejemplo, si el Registro contiene `WS11OTA_2.1.4`, pueden aparecer `WS11OTA_2.1.5`, `WS11OTA_2.1.6` o `WS11OTA_2.2.0`, pero nunca la 2.1.4 ni versiones anteriores. La lista muestra el nombre, la versión sin repetir el tag informativo, la fecha, el ZIP, su tamaño y cuál es la última disponible.
 
+### Origen de los datos y límite de GitHub
+
+La lista se obtiene de `ota-manifest.json`, un índice que el build del repositorio de OTAs publica en `https://raw.githubusercontent.com/Christianlg97/WinSlim11_OTAs/main/ota-manifest.json` con el tag, el nombre, la fecha, el ZIP, su tamaño y su SHA-256 de cada release. Ese archivo no consume la cuota de la API de GitHub, que limita las consultas anónimas a 60 por hora y dirección IP, compartidas por todos los programas del equipo, y que provocaba el error `GitHub respondió 403 (rate limit exceeded)`. Solo si el manifiesto no se puede leer se recurre a la API de releases; si esta responde 403 o 429 por cuota, el mensaje explica el motivo y la hora a partir de la cual se puede reintentar.
+
+Cada consulta correcta se guarda en `ota-cache.json`, junto a `wumgr.ini`. Cuando ni el manifiesto ni la API responden, la página muestra esa última lista buena indicando su fecha, en lugar de quedarse vacía.
+
 ### Aplicación de una OTA
 
 Al seleccionar una release, **Aplicar actualización** realiza este flujo:
 
-1. Descarga el primer recurso `.zip` adjunto a una carpeta temporal exclusiva.
-2. Extrae su contenido validando que ninguna entrada pueda salir del directorio temporal.
-3. Localiza y ejecuta `Install_Update.exe` con su propia carpeta como directorio de trabajo.
-4. Espera a que el instalador termine y comprueba su código de salida.
-5. Elimina el ZIP y todo el contenido temporal, también cuando se produce un error recuperable.
-6. Si finaliza correctamente, vuelve a consultar las releases disponibles.
+1. Descarga el ZIP de la release a una carpeta temporal exclusiva. Solo se aceptan archivos alojados en `https://github.com/Christianlg97/WinSlim11_OTAs/releases/download/`.
+2. Comprueba que el archivo descargado tenga el tamaño publicado y, si la referencia procede del manifiesto, su huella SHA-256; si no coinciden, se detiene sin ejecutar nada.
+3. Extrae su contenido validando que ninguna entrada pueda salir del directorio temporal.
+4. Localiza y ejecuta `Install_Update.exe` con su propia carpeta como directorio de trabajo.
+5. Espera a que el instalador termine y comprueba su código de salida.
+6. Elimina el ZIP y todo el contenido temporal, también cuando se produce un error recuperable.
+7. Si finaliza correctamente, vuelve a consultar las releases disponibles.
 
-La página también permite abrir la release seleccionada en GitHub. La consulta requiere conexión a GitHub y está sujeta a la disponibilidad y los límites de su API pública.
+La página también permite abrir la release seleccionada en GitHub. La consulta requiere conexión con GitHub; la cuota de su API solo interviene cuando el manifiesto no está disponible.
 
 ---
 
@@ -483,7 +490,7 @@ WinSlim Update lee el registro reciente relacionado con la operación para mostr
 
 ### Privacidad
 
-El proyecto no incluye telemetría propia, cuentas de usuario ni un backend de WinSlim Update. La información se procesa localmente. Las búsquedas y descargas sí establecen las conexiones normales necesarias con Microsoft, las fuentes de WinGet, los servidores de los fabricantes y la API o los recursos de GitHub para WinSlim OTAs.
+El proyecto no incluye telemetría propia, cuentas de usuario ni un backend de WinSlim Update. La información se procesa localmente. Las búsquedas y descargas sí establecen las conexiones normales necesarias con Microsoft, las fuentes de WinGet, los servidores de los fabricantes y, para WinSlim OTAs, con GitHub: el manifiesto en raw.githubusercontent.com, la API de releases como respaldo y las descargas de github.com.
 
 Consulta también [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
@@ -548,7 +555,7 @@ Source/
 | `PackageUpdates.cs` | Presentación, selección, filtrado y actualización secuencial de paquetes |
 | `WinGetPackageManager.cs` | Ejecución de WinGet, análisis de tablas, códigos y registros |
 | `PackageUpdateErrorDialog.cs` | Modal de diagnóstico, copia y reintento |
-| `OtaUpdates.cs` | Registro de disponibilidad, API de GitHub, comparación de tags y aplicación segura de OTAs |
+| `OtaUpdates.cs` | Registro de disponibilidad, manifiesto OTA con respaldo en la API de GitHub, caché local, comparación de tags, verificación del ZIP y aplicación segura de OTAs |
 
 ---
 
@@ -629,7 +636,7 @@ El código también contiene argumentos internos de vista previa usados para rev
 - Las directivas de Windows no se respetan de forma idéntica en todas las ediciones y compilaciones.
 - El catálogo offline solo representa la información incluida por Microsoft en `wsusscn2.cab`.
 - El proyecto utiliza .NET Framework 4.6.1 por compatibilidad con la base heredada.
-- Las WinSlim OTAs dependen de que `OTAManifestVersion` sea un `REG_SZ` válido y de que GitHub esté accesible.
+- Las WinSlim OTAs dependen de que `OTAManifestVersion` sea un `REG_SZ` válido y de que GitHub esté accesible; sin acceso se muestra la última consulta guardada.
 - Solo se reconocen releases estables con tags `WS11OTA_X.Y.Z` y al menos un recurso ZIP para poder aplicarlas.
 
 ---

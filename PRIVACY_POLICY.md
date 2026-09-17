@@ -6,7 +6,7 @@ Para realizar las funciones solicitadas por el usuario, la aplicación puede con
 
 - Los servicios de Microsoft utilizados por Windows Update.
 - Las fuentes de WinGet y los servidores de los fabricantes de aplicaciones.
-- La API y los recursos de GitHub del repositorio `Christianlg97/WinSlim11_OTAs`, únicamente cuando la instalación admite WinSlim OTAs y se consulta o aplica una release.
+- GitHub, únicamente cuando la instalación admite WinSlim OTAs y se consulta o aplica una release: el manifiesto `ota-manifest.json` del repositorio `Christianlg97/WinSlim11_OTAs` en raw.githubusercontent.com, su API de releases como respaldo y las descargas de github.com. La última lista de OTAs consultada se guarda localmente en `ota-cache.json`, junto al programa.
 
 La aplicación no envía deliberadamente datos personales a un servidor propio. Los servicios externos reciben la información técnica habitual de una conexión HTTP, de acuerdo con sus propias políticas.
 

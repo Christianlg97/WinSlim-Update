@@ -1,5 +1,12 @@
 # Changelog
 
+## WinSlim Update 3.0.9
+
+- Las OTAs se leen de `ota-manifest.json`, que el build del repositorio `Christianlg97/WinSlim11_OTAs` publica en raw.githubusercontent.com y que no consume la cuota anónima de la API de GitHub (60 consultas por hora y dirección IP, compartidas por todos los programas del equipo). La API de releases queda solo como respaldo.
+- Si GitHub limita la API, el mensaje explica el motivo y la hora a partir de la cual se puede reintentar, en lugar de `403 (rate limit exceeded)`.
+- La última consulta correcta se guarda en `ota-cache.json` y se muestra, con su fecha, cuando ni el manifiesto ni la API responden.
+- Antes de ejecutar el instalador se comprueba el tamaño del ZIP descargado y, si la referencia procede del manifiesto, su huella SHA-256; solo se aceptan ZIP alojados en las releases del repositorio oficial.
+
 ## WinSlim Update 3.0.8
 
 - Añadida la categoría independiente **WINSLIM OTAS**, separada de las aplicaciones y de las actualizaciones de la base Windows.
