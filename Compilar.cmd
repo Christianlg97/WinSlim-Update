@@ -5,6 +5,7 @@ title Compilador de WinSlim Update
 
 set "ROOT=%~dp0"
 set "ASSEMBLY_INFO=%ROOT%Source\wumgr\Properties\AssemblyInfo.cs"
+set "PROJECT=%ROOT%Source\wumgr\wumgr.csproj"
 set "SOLUTION=%ROOT%Source\wumgr.sln"
 set "OUTPUT=%ROOT%Source\wumgr\bin\Release"
 set "RELEASE=%ROOT%Release"
@@ -55,7 +56,9 @@ for /f "tokens=1-4 delims=." %%A in ("%NEW_VERSION%") do (
     )
 )
 
-powershell -NoProfile -Command "$path = $env:ASSEMBLY_INFO; $text = Get-Content -LiteralPath $path -Raw; $version = $env:ASSEMBLY_VERSION; $text = [regex]::Replace($text, '(?m)^\[assembly: AssemblyVersion\(\"[^\"]+\"\)\]\r?$', '[assembly: AssemblyVersion(\"' + $version + '\")]'); $text = [regex]::Replace($text, '(?m)^\[assembly: AssemblyFileVersion\(\"[^\"]+\"\)\]\r?$', '[assembly: AssemblyFileVersion(\"' + $version + '\")]'); [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))"
+rem AssemblyInfo.cs se lee y se escribe como UTF-8 sin BOM. Las comillas del regex van como \x22 y [char]34
+rem para no meter comillas escapadas en la orden: cmd las interpretaba y se comía el acento circunflejo del regex.
+powershell -NoProfile -Command "$path = $env:ASSEMBLY_INFO; $version = $env:ASSEMBLY_VERSION; $q = [char]34; $text = [IO.File]::ReadAllText($path); $text = [regex]::Replace($text, '(?m)^\[assembly: AssemblyVersion\(\x22[^\x22]+\x22\)\]', '[assembly: AssemblyVersion(' + $q + $version + $q + ')]'); $text = [regex]::Replace($text, '(?m)^\[assembly: AssemblyFileVersion\(\x22[^\x22]+\x22\)\]', '[assembly: AssemblyFileVersion(' + $q + $version + $q + ')]'); [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))"
 if errorlevel 1 (
     echo [ERROR] No se pudo actualizar AssemblyInfo.cs.
     goto :error
@@ -68,19 +71,41 @@ echo Versión actualizada a: %CURRENT_VERSION%
 echo.
 echo Buscando MSBuild...
 set "MSBUILD="
-if exist "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe" set "MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
-if not defined MSBUILD if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" set "MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"
-if not defined MSBUILD if exist "C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe" set "MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe"
-if not defined MSBUILD if exist "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" set "MSBUILD=C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe"
-if not defined MSBUILD if exist "%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe" set "MSBUILD=%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
+set "VSROOT="
+set "VSINSTALLER=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer"
+if not exist "%VSINSTALLER%\vswhere.exe" set "VSINSTALLER=%ProgramFiles%\Microsoft Visual Studio\Installer"
+if exist "%VSINSTALLER%\vswhere.exe" (
+    for /f "usebackq delims=" %%R in (`call "%VSINSTALLER%\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -property installationPath`) do set "VSROOT=%%R"
+    for /f "usebackq delims=" %%M in (`call "%VSINSTALLER%\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe`) do set "MSBUILD=%%M"
+)
+if not defined MSBUILD for %%E in (BuildTools Community Professional Enterprise) do (
+    if not defined MSBUILD if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\%%E\MSBuild\Current\Bin\MSBuild.exe" set "MSBUILD=%ProgramFiles(x86)%\Microsoft Visual Studio\2022\%%E\MSBuild\Current\Bin\MSBuild.exe"
+    if not defined MSBUILD if exist "%ProgramFiles%\Microsoft Visual Studio\2022\%%E\MSBuild\Current\Bin\MSBuild.exe" set "MSBUILD=%ProgramFiles%\Microsoft Visual Studio\2022\%%E\MSBuild\Current\Bin\MSBuild.exe"
+)
 
 if not defined MSBUILD (
-    echo [ERROR] No se encontró MSBuild.
-    echo Instala Visual Studio Build Tools con las herramientas de escritorio de .NET.
+    echo [ERROR] No se encontró el MSBuild de Visual Studio 2022.
+    echo Instala Visual Studio Build Tools con la carga de trabajo "Herramientas de compilación de escritorio de .NET".
+    echo El MSBuild antiguo de %WINDIR%\Microsoft.NET no sirve: su compilador de C# 5 no admite el código actual.
+    goto :error
+)
+echo MSBuild: %MSBUILD%
+
+rem Sin el targeting pack del .NET Framework del proyecto, MSBuild falla con MSB3644.
+set "TARGET_FX="
+for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "$m = Select-String -LiteralPath $env:PROJECT -Pattern '<TargetFrameworkVersion>(v[0-9.]+)<' | Select-Object -First 1; if ($m) { $m.Matches[0].Groups[1].Value }"`) do set "TARGET_FX=%%T"
+set "REFASM="
+if defined TARGET_FX set "FX_NUMBER=%TARGET_FX:v=%"
+if defined TARGET_FX set "REFASM=%ProgramFiles(x86)%\Reference Assemblies\Microsoft\Framework\.NETFramework\%TARGET_FX%"
+if defined TARGET_FX if not exist "%REFASM%\mscorlib.dll" set "REFASM=%ProgramFiles%\Reference Assemblies\Microsoft\Framework\.NETFramework\%TARGET_FX%"
+if defined TARGET_FX if not exist "%REFASM%\mscorlib.dll" (
+    echo [ERROR] No está instalado el targeting pack de .NET Framework %FX_NUMBER%, necesario para compilar.
+    echo Abre Visual Studio Installer, pulsa Modificar y marca el componente individual
+    echo ".NET Framework %FX_NUMBER% targeting pack", o ejecuta como administrador:
+    if defined VSROOT echo   "%VSINSTALLER%\setup.exe" modify --installPath "%VSROOT%" --add Microsoft.Net.Component.%FX_NUMBER%.TargetingPack --passive --norestart
     goto :error
 )
 
-echo MSBuild: %MSBUILD%
 echo Compilando WinSlim Update %CURRENT_VERSION% en modo Release...
 echo.
 "%MSBUILD%" "%SOLUTION%" /t:Rebuild /p:Configuration=Release /v:minimal
@@ -97,6 +122,7 @@ if not exist "%OUTPUT%\WinSlimUpdate.exe" (
 
 echo.
 echo Copiando el resultado a la carpeta Release...
+if not exist "%RELEASE%" mkdir "%RELEASE%"
 copy /Y "%OUTPUT%\WinSlimUpdate.exe" "%RELEASE%\WinSlimUpdate.exe" >nul
 if errorlevel 1 (
     echo [ERROR] No se pudo reemplazar Release\WinSlimUpdate.exe.
