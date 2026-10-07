@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -98,6 +99,7 @@ namespace wumgr
             actions.Controls.Add(packageUpdateSelectedButton);
             actions.Controls.Add(separationHint);
             surface.Controls.Add(actions);
+            ConfigureResponsiveActions(surface, actions);
             return surface;
         }
 
@@ -141,7 +143,7 @@ namespace wumgr
             packageFilter.Margin = new Padding(12, 6, 4, 6);
             packageFilter.AutoSize = false;
             packageFilter.BorderStyle = BorderStyle.None;
-            packageFilter.Font = new Font("Segoe UI", 10F);
+            packageFilter.Font = UiFonts.Create(10F);
             packageFilter.BackColor = UiInput;
             packageFilter.ForeColor = UiText;
             packageFilter.HandleCreated += delegate
@@ -197,25 +199,37 @@ namespace wumgr
             button.FlatAppearance.MouseOverBackColor = UiHover;
             button.BackColor = UiSurface;
             button.ForeColor = UiText;
-            button.Font = new Font("Segoe UI", 8.8F, FontStyle.Regular);
+            button.Font = UiFonts.Create(8.8F, FontStyle.Regular);
             button.Padding = new Padding(9, 0, 4, 0);
             button.TextAlign = ContentAlignment.MiddleLeft;
             button.Cursor = Cursors.Hand;
             button.UseVisualStyleBackColor = false;
             button.Paint += packageSelectionToggle_Paint;
+            button.GotFocus += actionButton_StateChanged;
+            button.LostFocus += actionButton_StateChanged;
         }
 
         private void packageSelectionToggle_Paint(object sender, PaintEventArgs e)
         {
             Button button = sender as Button;
-            if (button == null || button.Enabled)
+            if (button == null)
                 return;
 
+            bool hovered = button.Enabled && button.ClientRectangle.Contains(button.PointToClient(Cursor.Position));
             e.Graphics.Clear(UiSurface);
-            TextRenderer.DrawText(e.Graphics, button.Text, button.Font, button.ClientRectangle,
-                Color.FromArgb(126, 126, 126),
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            Rectangle bounds = new Rectangle(1, 1, Math.Max(1, button.Width - 3), Math.Max(1, button.Height - 3));
+            using (GraphicsPath path = CreateRoundedPath(bounds, 6))
+            using (SolidBrush fill = new SolidBrush(button.Enabled ? (hovered ? UiHover : button.BackColor) : UiSurface))
+                e.Graphics.FillPath(fill, path);
+            Rectangle textBounds = new Rectangle(button.Padding.Left, 0,
+                Math.Max(0, button.Width - button.Padding.Horizontal), button.Height);
+            TextRenderer.DrawText(e.Graphics, button.Text, button.Font, textBounds,
+                button.Enabled ? button.ForeColor : Color.FromArgb(126, 126, 126),
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
                 TextFormatFlags.NoPrefix);
+            if (button.Focused && ShowFocusCues)
+                ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(bounds, -2, -2), UiMuted, UiSurface);
         }
 
         private Control BuildPackageListSurface()
@@ -267,14 +281,14 @@ namespace wumgr
             status.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112F));
             status.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
 
-            packageStatusLabel = CreateLabel("Pulsa «Buscar paquetes» para comprobar WinGet.", 9F, FontStyle.Regular, UiMuted);
+            packageStatusLabel = CreateLabel("Pulsa «Buscar paquetes» para comprobar WinGet.", 10F, FontStyle.Regular, UiText);
             packageStatusLabel.Dock = DockStyle.Fill;
             packageStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
             packageStatusLabel.AutoEllipsis = true;
 
             packageProgress = new ModernProgressBar();
             packageProgress.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-            packageProgress.Height = 10;
+            packageProgress.Height = 14;
             packageProgress.Margin = new Padding(0, 0, 12, 0);
             packageProgress.Visible = false;
 
@@ -288,7 +302,7 @@ namespace wumgr
             packageCancelButton.Visible = false;
             packageCancelButton.Click += delegate { CancelPackageOperation(); };
 
-            Label engine = CreateLabel("Motor: WinGet", 8.8F, FontStyle.Bold, UiMuted);
+            Label engine = CreateLabel("Motor: WinGet", 10F, FontStyle.Bold, UiAccent);
             engine.Dock = DockStyle.Fill;
             engine.TextAlign = ContentAlignment.MiddleCenter;
 

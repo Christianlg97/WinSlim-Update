@@ -33,14 +33,6 @@ C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release
 C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release\WinSlimUpdate.pdb
 C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release\Interop.TaskScheduler.dll
 C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release\Interop.WUApiLib.dll
-C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release\mscorlib.dll
-C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release\es\mscorlib.resources.dll
-C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release\normidna.nlp
-C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release\normnfc.nlp
-C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release\normnfd.nlp
-C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release\normnfkc.nlp
-C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\bin\Release\normnfkd.nlp
-C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\obj\Release\wumgr.csprojResolveAssemblyReference.cache
 C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\obj\Release\wumgr.Properties.Resources.resources
 C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\obj\Release\wumgr.WuMgr.resources
 C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\obj\Release\wumgr.csproj.GenerateResource.Cache
@@ -59,3 +51,6 @@ C:\Users\redes.sti.adm\Desktop\Priv\Proyectos\WinSlim-Update\Source\wumgr\obj\Re
 C:\Users\redes.sti.adm\Desktop\Priv\Proyectos\WinSlim-Update\Source\wumgr\obj\Release\wumgr.csproj.AssemblyReference.cache
 C:\Users\redes.sti.adm\Desktop\Priv\Proyectos\WinSlim-Update\Source\wumgr\obj\Release\wumgr.csproj.CoreCompileInputs.cache
 C:\Users\redes.sti.adm\Desktop\Priv\Proyectos\WinSlim-Update\Source\wumgr\obj\Release\wumgr.csproj.Up2Date
+C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\obj\Release\wumgr.csproj.AssemblyReference.cache
+C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\obj\Release\wumgr.csproj.CoreCompileInputs.cache
+C:\Users\Administrador\Desktop\Proyectos\WinSlim-Update\Source\wumgr\obj\Release\wumgr.csproj.Up2Date

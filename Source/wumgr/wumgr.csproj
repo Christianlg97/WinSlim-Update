@@ -100,6 +100,14 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Common\HttpTask.cs" />
+    <Compile Include="Common\SegmentedHttpDownload.cs" />
+    <Compile Include="Common\UiFonts.cs" />
+    <Compile Include="Common\WindowsUpdateServiceRecovery.cs" />
+    <EmbeddedResource Include="res\fonts\Ubuntu-Regular.ttf"><LogicalName>wumgr.Fonts.Ubuntu-Regular.ttf</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="res\fonts\Ubuntu-Bold.ttf"><LogicalName>wumgr.Fonts.Ubuntu-Bold.ttf</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="res\fonts\Ubuntu-Italic.ttf"><LogicalName>wumgr.Fonts.Ubuntu-Italic.ttf</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="res\fonts\Ubuntu-BoldItalic.ttf"><LogicalName>wumgr.Fonts.Ubuntu-BoldItalic.ttf</LogicalName></EmbeddedResource>
+    <EmbeddedResource Include="res\fonts\UFL.txt"><LogicalName>wumgr.Fonts.UFL.txt</LogicalName></EmbeddedResource>
     <Compile Include="Common\FileOps.cs" />
     <Compile Include="Common\AppLog.cs" />
     <Compile Include="Common\KnownFolders.cs" />

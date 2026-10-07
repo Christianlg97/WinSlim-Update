@@ -1,5 +1,12 @@
 # Avisos de terceros
 
+## Ubuntu Font Family
+
+La interfaz incluye las variantes Regular, Bold, Italic y BoldItalic de Ubuntu, sin modificar, obtenidas del repositorio de Google Fonts:
+https://github.com/google/fonts/tree/main/ufl/ubuntu
+
+Estas fuentes se distribuyen bajo Ubuntu Font Licence 1.0. El texto completo de la licencia se conserva en `wumgr/res/fonts/UFL.txt` y se incluye como recurso `wumgr.Fonts.UFL.txt` en el ejecutable. Su registro se limita al proceso de la aplicacion y no instala fuentes en Windows.
+
 ## UniGetUI
 
 La implementación de **Actualizaciones de paquetes** adapta el flujo de consulta y actualización mediante WinGet del proyecto UniGetUI.

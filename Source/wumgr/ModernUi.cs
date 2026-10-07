@@ -10,6 +10,7 @@ namespace wumgr
 {
     public partial class WuMgr
     {
+        private int modernResizeGrip = 7;
         private static readonly Color UiBackground = Color.FromArgb(24, 24, 24);
         private static readonly Color UiSurface = Color.FromArgb(32, 32, 32);
         private static readonly Color UiSidebar = Color.FromArgb(17, 17, 17);
@@ -94,7 +95,7 @@ namespace wumgr
 
             Text = "WinSlim Update";
             BackColor = UiBackground;
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
+            Font = UiFonts.Create(9.5F, FontStyle.Regular, GraphicsUnit.Point);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.None;
             MinimumSize = new Size(1040, 680);
@@ -135,6 +136,15 @@ namespace wumgr
             root.Controls.Add(BuildTitleBar(), 0, 0);
             root.Controls.Add(shell, 0, 1);
             Controls.Add(root);
+            UiFonts.Apply(this);
+            WindowResizeFilter resizeFilter = new WindowResizeFilter(this);
+            Application.AddMessageFilter(resizeFilter);
+            Disposed += delegate { Application.RemoveMessageFilter(resizeFilter); };
+            LocationChanged += delegate
+            {
+                if (WindowState == FormWindowState.Normal && IsHandleCreated)
+                    MaximizedBounds = Screen.FromHandle(Handle).WorkingArea;
+            };
 
             Resize += delegate
             {
@@ -218,14 +228,14 @@ namespace wumgr
             identity.Dock = DockStyle.Fill;
             identity.Margin = Padding.Empty;
             identity.BackColor = titleBar.BackColor;
-            Label title = CreateLabel("◆  WinSlim Update", 9F, FontStyle.Bold, UiText);
+            Label title = CreateLabel("◆  WinSlim Update", 10.5F, FontStyle.Bold, UiText);
             title.Dock = DockStyle.Fill;
             title.Padding = new Padding(4, 0, 0, 0);
             title.TextAlign = ContentAlignment.MiddleLeft;
             Button appMenu = CreateWindowButton("☰");
             appMenu.Dock = DockStyle.Left;
             appMenu.Width = 40;
-            appMenu.Font = new Font("Segoe UI", 11F, FontStyle.Regular);
+            appMenu.Font = UiFonts.Create(11F, FontStyle.Regular);
             appMenu.Click += delegate
             {
                 if (notifyIcon.ContextMenu != null)
@@ -284,7 +294,7 @@ namespace wumgr
             button.FlatAppearance.MouseOverBackColor = UiHover;
             button.BackColor = Color.FromArgb(14, 14, 14);
             button.ForeColor = UiText;
-            button.Font = new Font("Segoe UI", 10F, FontStyle.Regular);
+            button.Font = UiFonts.Create(10F, FontStyle.Regular);
             button.UseVisualStyleBackColor = false;
             return button;
         }
@@ -306,9 +316,10 @@ namespace wumgr
             CaptionButtonIcon icon = (CaptionButtonIcon)button.Tag;
             float centerX = button.ClientRectangle.Width / 2F;
             float centerY = button.ClientRectangle.Height / 2F;
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.SmoothingMode = icon == CaptionButtonIcon.Close
+                ? SmoothingMode.AntiAlias : SmoothingMode.None;
 
-            using (Pen pen = new Pen(UiText, 1.35F))
+            using (Pen pen = new Pen(UiText, 1F))
             {
                 pen.StartCap = LineCap.Round;
                 pen.EndCap = LineCap.Round;
@@ -344,6 +355,8 @@ namespace wumgr
 
         private void ToggleMaximize()
         {
+            if (WindowState == FormWindowState.Normal)
+                MaximizedBounds = Screen.FromHandle(Handle).WorkingArea;
             WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
             UpdateWindowButton();
             UpdateWindowCorners();
@@ -391,7 +404,7 @@ namespace wumgr
 
             Panel brand = new Panel();
             brand.Dock = DockStyle.Top;
-            brand.Height = 106;
+            brand.Height = 118;
             brand.BackColor = UiSidebar;
 
             UpdateLogoMark mark = new UpdateLogoMark();
@@ -406,11 +419,12 @@ namespace wumgr
             caption.Location = new Point(49, 29);
             caption.AutoSize = true;
 
-            modernEditionLabel = CreateLabel("ACTUALIZACIONES DE LA BASE WINDOWS", 8F, FontStyle.Bold, UiMuted);
+            modernEditionLabel = CreateLabel("ACTUALIZACIONES DE LA BASE WINDOWS", 9.5F, FontStyle.Bold, UiText);
             modernEditionLabel.Location = new Point(8, 72);
             modernEditionLabel.AutoSize = false;
-            modernEditionLabel.Size = new Size(190, 28);
+            modernEditionLabel.Size = new Size(190, 36);
             modernEditionLabel.TextAlign = ContentAlignment.MiddleLeft;
+            modernEditionLabel.Paint += sidebarSection_Paint;
 
             brand.Controls.Add(mark);
             brand.Controls.Add(product);
@@ -431,42 +445,41 @@ namespace wumgr
             StyleNavigationButton(btnInstalled);
             StyleNavigationButton(btnHidden);
             StyleNavigationButton(btnHistory);
-            Label packagesCaption = CreateLabel("APLICACIONES", 8F, FontStyle.Bold, UiMuted);
+            Label packagesCaption = CreateLabel("APLICACIONES", 9.5F, FontStyle.Bold, UiText);
             packagesCaption.AutoSize = false;
-            packagesCaption.Size = new Size(190, 28);
-            packagesCaption.Margin = new Padding(8, 5, 8, 0);
+            packagesCaption.Size = new Size(190, 32);
+            packagesCaption.Margin = new Padding(8, 12, 8, 4);
             packagesCaption.TextAlign = ContentAlignment.MiddleLeft;
+            packagesCaption.Paint += sidebarSection_Paint;
             modernPackageUpdatesButton = new CheckBox();
             modernPackageUpdatesButton.Name = "modernPackageUpdatesButton";
             modernPackageUpdatesButton.Text = "Actualizaciones de\r\npaquetes";
             StyleNavigationButton(modernPackageUpdatesButton);
             modernPackageUpdatesButton.Size = new Size(190, 50);
-            modernPackageUpdatesButton.Font = new Font("Segoe UI", 8.8F, FontStyle.Regular);
+            modernPackageUpdatesButton.Font = UiFonts.Create(9.6F, FontStyle.Regular);
             Label otaCaption = null;
             if (otaFeatureAvailable)
             {
-                otaCaption = CreateLabel("WINSLIM OTAS", 8F, FontStyle.Bold, UiMuted);
+                otaCaption = CreateLabel("WINSLIM OTAS", 9.5F, FontStyle.Bold, UiText);
                 otaCaption.AutoSize = false;
-                otaCaption.Size = new Size(190, 28);
-                otaCaption.Margin = new Padding(8, 2, 8, 0);
+                otaCaption.Size = new Size(190, 32);
+                otaCaption.Margin = new Padding(8, 12, 8, 4);
                 otaCaption.TextAlign = ContentAlignment.MiddleLeft;
+                otaCaption.Paint += sidebarSection_Paint;
                 modernOtaUpdatesButton = new CheckBox();
                 modernOtaUpdatesButton.Name = "modernOtaUpdatesButton";
                 modernOtaUpdatesButton.Text = "Actualizaciones de\r\nWinSlim";
                 StyleNavigationButton(modernOtaUpdatesButton);
                 modernOtaUpdatesButton.Size = new Size(190, 50);
-                modernOtaUpdatesButton.Font = new Font("Segoe UI", 8.8F, FontStyle.Regular);
+                modernOtaUpdatesButton.Font = UiFonts.Create(9.6F, FontStyle.Regular);
             }
             modernSettingsButton = new CheckBox();
             modernSettingsButton.Name = "modernSettingsButton";
             modernSettingsButton.Text = "Configuración";
             StyleNavigationButton(modernSettingsButton);
             modernSettingsButton.Click += delegate { ShowSettingsPage(); };
-            Label settingsCaption = CreateLabel("CONFIGURACIÓN", 8F, FontStyle.Bold, UiMuted);
-            settingsCaption.AutoSize = false;
-            settingsCaption.Size = new Size(190, 28);
-            settingsCaption.Margin = new Padding(8, 2, 8, 0);
-            settingsCaption.TextAlign = ContentAlignment.MiddleLeft;
+            modernSettingsButton.Visible = false;
+            modernSettingsButton.TabStop = false;
             navigation.Controls.Add(btnWinUpd);
             navigation.Controls.Add(btnInstalled);
             navigation.Controls.Add(btnHidden);
@@ -478,17 +491,16 @@ namespace wumgr
                 navigation.Controls.Add(otaCaption);
                 navigation.Controls.Add(modernOtaUpdatesButton);
             }
-            navigation.Controls.Add(settingsCaption);
             navigation.Controls.Add(modernSettingsButton);
             Panel footer = new Panel();
             footer.Dock = DockStyle.Bottom;
             footer.Height = 48;
             footer.BackColor = UiSidebar;
-            Label footerTitle = CreateLabel("WinSlim Update", 8.2F, FontStyle.Bold, UiMuted);
+            Label footerTitle = CreateLabel("WinSlim Update", 10.5F, FontStyle.Bold, UiText);
             footerTitle.Location = new Point(4, 7);
             footerTitle.AutoSize = true;
-            Label footerVersion = CreateLabel("Versión " + Program.mVersion, 7.8F, FontStyle.Regular, Color.FromArgb(112, 112, 112));
-            footerVersion.Location = new Point(4, 26);
+            Label footerVersion = CreateLabel("Versión " + Program.mVersion, 9.2F, FontStyle.Regular, UiMuted);
+            footerVersion.Location = new Point(4, 28);
             footerVersion.AutoSize = true;
             footer.Controls.Add(footerTitle);
             footer.Controls.Add(footerVersion);
@@ -625,6 +637,7 @@ namespace wumgr
             flowLayoutPanel1.Controls.SetChildIndex(btnGetLink, 5);
 
             actionSurface.Controls.Add(flowLayoutPanel1);
+            ConfigureResponsiveActions(actionSurface, flowLayoutPanel1);
 
             modernActionHint = CreateLabel("Esta sección es sólo de consulta.", 9.5F, FontStyle.Regular, UiMuted);
             modernActionHint.Dock = DockStyle.Fill;
@@ -699,7 +712,7 @@ namespace wumgr
             txtFilter.AutoSize = false;
             txtFilter.Height = 22;
             txtFilter.BorderStyle = BorderStyle.None;
-            txtFilter.Font = new Font("Segoe UI", 10F);
+            txtFilter.Font = UiFonts.Create(10F);
             txtFilter.BackColor = UiInput;
             txtFilter.ForeColor = UiText;
             txtFilter.HandleCreated += delegate
@@ -763,6 +776,124 @@ namespace wumgr
             return row;
         }
 
+        private static void ConfigureResponsiveActions(Control surface, FlowLayoutPanel actions)
+        {
+            actions.WrapContents = true;
+            bool updating = false;
+            Action update = delegate
+            {
+                TableLayoutPanel page = surface.Parent as TableLayoutPanel;
+                if (updating || page == null || !surface.Visible || actions.ClientSize.Width <= 0)
+                    return;
+                int usedWidth = 0;
+                int rowsHeight = actions.Padding.Vertical;
+                int rowHeight = 0;
+                int availableWidth = Math.Max(1, page.ClientSize.Width - page.Padding.Horizontal -
+                    surface.Margin.Horizontal - surface.Padding.Horizontal - actions.Padding.Horizontal);
+                foreach (Control control in actions.Controls)
+                    if (control.Visible)
+                    {
+                        int width = control.Width + control.Margin.Horizontal;
+                        if (usedWidth > 0 && usedWidth + width > availableWidth)
+                        {
+                            rowsHeight += rowHeight;
+                            usedWidth = 0;
+                            rowHeight = 0;
+                        }
+                        usedWidth += width;
+                        rowHeight = Math.Max(rowHeight, control.Height + control.Margin.Vertical);
+                    }
+                if (rowHeight == 0)
+                    foreach (Control control in actions.Controls)
+                        rowHeight = Math.Max(rowHeight, control.Height + control.Margin.Vertical);
+                int bottom = rowsHeight + rowHeight;
+                int row = page.GetRow(surface);
+                if (row < 0 || row >= page.RowStyles.Count || bottom == 0)
+                    return;
+                int height = bottom + surface.Padding.Vertical + surface.Margin.Vertical;
+                if (Math.Abs(page.RowStyles[row].Height - height) < 1)
+                    return;
+                updating = true;
+                try { page.RowStyles[row].Height = height; }
+                finally { updating = false; }
+            };
+            bool scheduled = false;
+            Action schedule = delegate
+            {
+                if (scheduled || actions.IsDisposed || !actions.IsHandleCreated)
+                    return;
+                scheduled = true;
+                actions.BeginInvoke(new Action(() =>
+                {
+                    scheduled = false;
+                    if (!actions.IsDisposed && !surface.IsDisposed)
+                        update();
+                }));
+            };
+            actions.Layout += delegate { schedule(); };
+            actions.SizeChanged += delegate { schedule(); };
+            actions.HandleCreated += delegate { schedule(); };
+            surface.SizeChanged += delegate { schedule(); };
+            surface.ParentChanged += delegate { schedule(); };
+            surface.VisibleChanged += delegate { schedule(); };
+        }
+
+        private static int ResizeHitTest(Size size, Point point, int grip)
+        {
+            if (point.X < 0 || point.Y < 0 || point.X >= size.Width || point.Y >= size.Height)
+                return 0;
+            bool left = point.X < grip, right = point.X >= size.Width - grip;
+            bool top = point.Y < grip, bottom = point.Y >= size.Height - grip;
+            if (left && top) return 13;
+            if (right && top) return 14;
+            if (left && bottom) return 16;
+            if (right && bottom) return 17;
+            if (left) return 10;
+            if (right) return 11;
+            if (top) return 12;
+            if (bottom) return 15;
+            return 0;
+        }
+
+        private sealed class WindowResizeFilter : IMessageFilter
+        {
+            private readonly WuMgr window;
+            private readonly int grip;
+
+            public WindowResizeFilter(WuMgr window)
+            {
+                this.window = window;
+                using (Graphics graphics = window.CreateGraphics())
+                    grip = Math.Max(7, (int)Math.Round(7 * graphics.DpiX / 96F));
+                window.modernResizeGrip = grip;
+            }
+
+            public bool PreFilterMessage(ref Message message)
+            {
+                if ((message.Msg != 0x0200 && message.Msg != 0x0201) || window.IsDisposed ||
+                    window.WindowState != FormWindowState.Normal || window.FormBorderStyle != FormBorderStyle.None)
+                    return false;
+                Control target = Control.FromChildHandle(message.HWnd);
+                if (target == null || target.FindForm() != window)
+                    return false;
+                int hit = ResizeHitTest(window.ClientSize, window.PointToClient(Cursor.Position), grip);
+                if (hit == 0)
+                    return false;
+                if (message.Msg == 0x0200)
+                {
+                    Cursor.Current = hit == 13 || hit == 17 ? Cursors.SizeNWSE :
+                        hit == 14 || hit == 16 ? Cursors.SizeNESW :
+                        hit == 10 || hit == 11 ? Cursors.SizeWE : Cursors.SizeNS;
+                    return true;
+                }
+                ReleaseCapture();
+                Point screen = Cursor.Position;
+                IntPtr position = new IntPtr(unchecked((screen.Y << 16) | (screen.X & 0xFFFF)));
+                SendWindowMessage(window.Handle, 0x00A1, new IntPtr(hit), position);
+                return true;
+            }
+        }
+
         private Button CreateUpdateToolButton(string text, int width)
         {
             Button button = new Button();
@@ -770,7 +901,7 @@ namespace wumgr
             button.Width = width;
             button.Height = 32;
             button.Margin = new Padding(0, 0, 7, 4);
-            button.Font = new Font("Segoe UI Semibold", 8.6F, FontStyle.Bold);
+            button.Font = UiFonts.Create(8.6F, FontStyle.Bold);
             return button;
         }
 
@@ -984,7 +1115,7 @@ namespace wumgr
             logBox.BorderStyle = BorderStyle.None;
             logBox.BackColor = Color.FromArgb(18, 18, 18);
             logBox.ForeColor = Color.FromArgb(205, 205, 205);
-            logBox.Font = new Font("Consolas", 8.8F);
+            logBox.Font = UiFonts.Create(8.8F);
 
             modernUpdateList = new ModernUpdateList();
             modernUpdateList.Name = "modernUpdateList";
@@ -1039,8 +1170,8 @@ namespace wumgr
             lblStatus.Dock = DockStyle.Fill;
             lblStatus.Margin = new Padding(0, 0, 8, 0);
             lblStatus.TextAlign = ContentAlignment.MiddleLeft;
-            lblStatus.ForeColor = UiMuted;
-            lblStatus.Font = new Font("Segoe UI", 9F);
+            lblStatus.ForeColor = UiText;
+            lblStatus.Font = UiFonts.Create(10F);
             lblStatus.AutoEllipsis = true;
             lblStatus.Visible = true;
             if (string.IsNullOrWhiteSpace(lblStatus.Text))
@@ -1048,7 +1179,7 @@ namespace wumgr
 
             modernProgress = new ModernProgressBar();
             modernProgress.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-            modernProgress.Height = 10;
+            modernProgress.Height = 14;
             modernProgress.Margin = new Padding(0, 0, 12, 0);
             modernProgress.Visible = false;
 
@@ -1077,7 +1208,7 @@ namespace wumgr
             modernLogButton.MinimumSize = new Size(124, 32);
             modernLogButton.MaximumSize = new Size(124, 32);
             modernLogButton.Margin = new Padding(2, 0, 0, 0);
-            modernLogButton.Font = new Font("Segoe UI Semibold", 8.8F, FontStyle.Bold);
+            modernLogButton.Font = UiFonts.Create(8.8F, FontStyle.Bold);
             modernLogButton.Click += modernLogButton_Click;
 
             lblSupport.Dock = DockStyle.Fill;
@@ -1125,7 +1256,7 @@ namespace wumgr
             gbStartup.Location = new Point(12, 196);
             gbStartup.Size = new Size(228, 126);
             gbStartup.ForeColor = UiText;
-            gbStartup.Font = new Font("Segoe UI Semibold", 8.5F, FontStyle.Bold);
+            gbStartup.Font = UiFonts.Create(8.5F, FontStyle.Bold);
             StyleSettingsControl(chkAutoRun, 10, 24, 208);
             StyleSettingsControl(dlAutoCheck, 10, 51, 208);
             StyleSettingsControl(chkNoUAC, 10, 83, 208);
@@ -1335,7 +1466,7 @@ namespace wumgr
             button.Dock = DockStyle.Fill;
             button.FlatStyle = FlatStyle.Flat;
             button.FlatAppearance.BorderSize = 0;
-            button.Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold);
+            button.Font = UiFonts.Create(9F, FontStyle.Bold);
             button.Cursor = Cursors.Hand;
             button.UseVisualStyleBackColor = false;
             return button;
@@ -1368,7 +1499,7 @@ namespace wumgr
             button.FlatAppearance.MouseOverBackColor = UiSidebarHover;
             button.BackColor = UiSidebar;
             button.ForeColor = UiText;
-            button.Font = new Font("Segoe UI", 9.4F, FontStyle.Regular);
+            button.Font = UiFonts.Create(10F, FontStyle.Regular);
             button.TextAlign = ContentAlignment.MiddleLeft;
             button.Cursor = Cursors.Hand;
             button.UseVisualStyleBackColor = false;
@@ -1380,13 +1511,127 @@ namespace wumgr
         private void navigationButton_Paint(object sender, PaintEventArgs e)
         {
             CheckBox button = sender as CheckBox;
-            if (button == null || !button.Checked)
+            if (button == null)
                 return;
+            bool hovered = button.Enabled && button.ClientRectangle.Contains(button.PointToClient(Cursor.Position));
+            bool windowsItem = button == btnWinUpd || button == btnInstalled || button == btnHidden || button == btnHistory;
+            bool selected = button.Checked && (!windowsItem || (!modernSettingsVisible && !packageUpdatesVisible && !otaUpdatesVisible));
+            e.Graphics.Clear(UiSidebar);
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using (GraphicsPath indicator = CreateRoundedPath(new Rectangle(4, 11, 4, Math.Max(4, button.Height - 22)), 2))
-            using (SolidBrush brush = new SolidBrush(UiAccent))
-                e.Graphics.FillPath(brush, indicator);
+            Rectangle bounds = new Rectangle(1, 1, button.Width - 3, button.Height - 3);
+            using (GraphicsPath path = CreateRoundedPath(bounds, 8))
+            using (SolidBrush fill = new SolidBrush(selected ? UiSidebarHover : hovered ? UiSurface : UiSidebar))
+            {
+                e.Graphics.FillPath(fill, path);
+                if (selected)
+                    using (Pen outline = new Pen(UiBorder))
+                        e.Graphics.DrawPath(outline, path);
+            }
+            if (selected)
+                using (GraphicsPath indicator = CreateRoundedPath(new Rectangle(4, button.Height / 2 - 9, 2, 18), 1))
+                using (SolidBrush brush = new SolidBrush(UiAccent))
+                    e.Graphics.FillPath(brush, indicator);
+            Color foreground = button.Enabled ? (selected ? UiText : UiAccent) : UiMuted;
+            DrawSidebarIcon(e.Graphics, button, new Rectangle(13, button.Height / 2 - 9, 18, 18),
+                button.Enabled ? (selected || hovered ? UiText : UiAccent) : UiMuted);
+            string label = button.Text ?? string.Empty;
+            int badgeWidth = 0;
+            int countStart = windowsItem ? label.LastIndexOf(" (", StringComparison.Ordinal) : -1;
+            if (countStart >= 0 && label.EndsWith(")", StringComparison.Ordinal))
+            {
+                string count = label.Substring(countStart + 2, label.Length - countStart - 3);
+                badgeWidth = Math.Max(24, TextRenderer.MeasureText(e.Graphics, count, button.Font, Size.Empty,
+                    TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width + 12);
+                Rectangle badge = new Rectangle(button.Width - badgeWidth - 10, button.Height / 2 - 9, badgeWidth, 18);
+                bool emptyCount = count == "0";
+                using (GraphicsPath badgePath = CreateRoundedPath(badge, 5))
+                using (SolidBrush fill = new SolidBrush(selected ? UiBorder : emptyCount ? UiSurface : UiInput))
+                    e.Graphics.FillPath(fill, badgePath);
+                TextRenderer.DrawText(e.Graphics, count, button.Font, badge, selected || !emptyCount ? UiAccent : UiMuted,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+                label = label.Substring(0, countStart);
+            }
+            TextRenderer.DrawText(e.Graphics, label, button.Font,
+                new Rectangle(40, 0, Math.Max(0, button.Width - 50 - (badgeWidth > 0 ? badgeWidth + 6 : 0)), button.Height), foreground,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
+            if (button.Focused && ShowFocusCues)
+                ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(bounds, -3, -3), UiMuted, UiSidebarHover);
             e.Graphics.SmoothingMode = SmoothingMode.Default;
+        }
+
+        private void sidebarSection_Paint(object sender, PaintEventArgs e)
+        {
+            Label label = (Label)sender;
+            // The two-line Windows heading already uses the full label height.
+            if (label == modernEditionLabel)
+                return;
+            e.Graphics.Clear(UiSidebar);
+            TextRenderer.DrawText(e.Graphics, label.Text, label.Font,
+                new Rectangle(0, 0, label.Width, label.Height), label.ForeColor,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine |
+                TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix | TextFormatFlags.EndEllipsis);
+        }
+
+        private void DrawSidebarIcon(Graphics graphics, CheckBox button, Rectangle bounds, Color color)
+        {
+            GraphicsState state = graphics.Save();
+            graphics.TranslateTransform(bounds.Left, bounds.Top);
+            graphics.ScaleTransform(bounds.Width / 16F, bounds.Height / 16F);
+            using (Pen pen = new Pen(color, 1.5F))
+            {
+                pen.StartCap = pen.EndCap = LineCap.Round;
+                pen.LineJoin = LineJoin.Round;
+                if (button == btnWinUpd)
+                {
+                    graphics.DrawLine(pen, 8, 2, 8, 10);
+                    graphics.DrawLines(pen, new[] { new Point(5, 7), new Point(8, 10), new Point(11, 7) });
+                    graphics.DrawLines(pen, new[] { new Point(2, 10), new Point(2, 14), new Point(14, 14), new Point(14, 10) });
+                }
+                else if (button == btnInstalled)
+                {
+                    graphics.DrawEllipse(pen, 1.5F, 1.5F, 13F, 13F);
+                    graphics.DrawLines(pen, new[] { new Point(4, 8), new Point(7, 11), new Point(12, 5) });
+                }
+                else if (button == btnHidden)
+                {
+                    graphics.DrawBezier(pen, 1, 8, 5, 1, 11, 1, 15, 8);
+                    graphics.DrawBezier(pen, 1, 8, 5, 15, 11, 15, 15, 8);
+                    graphics.DrawEllipse(pen, 6, 6, 4, 4);
+                    graphics.DrawLine(pen, 2, 14, 14, 2);
+                }
+                else if (button == btnHistory)
+                {
+                    graphics.DrawArc(pen, 2, 2, 12, 12, 210, 300);
+                    graphics.DrawLines(pen, new[] { new Point(1, 2), new Point(1, 6), new Point(5, 6) });
+                    graphics.DrawLines(pen, new[] { new Point(8, 4), new Point(8, 8), new Point(11, 10) });
+                }
+                else if (button == modernPackageUpdatesButton)
+                {
+                    graphics.DrawPolygon(pen, new[] { new Point(8, 1), new Point(14, 4), new Point(14, 12), new Point(8, 15), new Point(2, 12), new Point(2, 4) });
+                    graphics.DrawLines(pen, new[] { new Point(2, 4), new Point(8, 7), new Point(14, 4) });
+                    graphics.DrawLine(pen, 8, 7, 8, 15);
+                    graphics.DrawLine(pen, 5, 2.5F, 11, 5.5F);
+                }
+                else if (button == modernOtaUpdatesButton)
+                {
+                    graphics.DrawArc(pen, 2, 2, 12, 12, 35, 285);
+                    graphics.DrawLines(pen, new[] { new Point(10, 1), new Point(14, 3), new Point(13, 7) });
+                    graphics.DrawLine(pen, 8, 11, 8, 5);
+                    graphics.DrawLines(pen, new[] { new Point(5, 8), new Point(8, 5), new Point(11, 8) });
+                }
+                else
+                {
+                    graphics.DrawEllipse(pen, 3, 3, 10, 10);
+                    graphics.DrawEllipse(pen, 6, 6, 4, 4);
+                    for (int i = 0; i < 8; i++)
+                    {
+                        double angle = i * Math.PI / 4;
+                        graphics.DrawLine(pen, 8 + (float)Math.Cos(angle) * 5, 8 + (float)Math.Sin(angle) * 5,
+                            8 + (float)Math.Cos(angle) * 7, 8 + (float)Math.Sin(angle) * 7);
+                    }
+                }
+            }
+            graphics.Restore(state);
         }
 
         private void modernNavigationButton_Click(object sender, EventArgs e)
@@ -1411,7 +1656,7 @@ namespace wumgr
             button.FlatAppearance.MouseOverBackColor = background == UiAccent ? UiAccentHover : background;
             button.BackColor = background;
             button.ForeColor = foreground;
-            button.Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold);
+            button.Font = UiFonts.Create(9.5F, FontStyle.Bold);
             button.TextImageRelation = TextImageRelation.ImageBeforeText;
             button.ImageAlign = ContentAlignment.MiddleLeft;
             button.TextAlign = ContentAlignment.MiddleCenter;
@@ -1435,7 +1680,7 @@ namespace wumgr
             button.FlatAppearance.MouseDownBackColor = Color.FromArgb(57, 57, 57);
             button.BackColor = UiInput;
             button.ForeColor = foreground;
-            button.Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold);
+            button.Font = UiFonts.Create(9F, FontStyle.Bold);
             button.TextImageRelation = TextImageRelation.ImageBeforeText;
             button.ImageAlign = ContentAlignment.MiddleLeft;
             button.TextAlign = ContentAlignment.MiddleCenter;
@@ -1463,6 +1708,8 @@ namespace wumgr
             button.MouseUp += actionButton_StateChanged;
             button.MouseCaptureChanged += actionButton_StateChanged;
             button.EnabledChanged += actionButton_StateChanged;
+            button.GotFocus += actionButton_StateChanged;
+            button.LostFocus += actionButton_StateChanged;
         }
 
         private void actionButton_MouseEnter(object sender, EventArgs e)
@@ -1551,11 +1798,22 @@ namespace wumgr
                 Rectangle outlineBounds = new Rectangle(1, 1,
                     Math.Max(1, button.Width - 3), Math.Max(1, button.Height - 3));
                 using (GraphicsPath outlinePath = CreateRoundedPath(outlineBounds, 8))
-                using (Pen outlinePen = new Pen(UiBorder, 1.2F))
+                using (Pen outlinePen = new Pen(pointerInside ? UiMuted : UiBorder, 1F))
                     e.Graphics.DrawPath(outlinePen, outlinePath);
             }
 
             DrawActionButtonContents(e.Graphics, button, bounds, foreground);
+            if (button.Enabled && button.Focused && ShowFocusCues)
+            {
+                Rectangle focusBounds = Rectangle.Inflate(bounds, -4, -4);
+                if (focusBounds.Width > 0 && focusBounds.Height > 0)
+                    using (GraphicsPath focusPath = CreateRoundedPath(focusBounds, 5))
+                    using (Pen focusPen = new Pen(foreground, 1F))
+                    {
+                        focusPen.DashStyle = DashStyle.Dot;
+                        e.Graphics.DrawPath(focusPen, focusPath);
+                    }
+            }
             e.Graphics.SmoothingMode = SmoothingMode.Default;
         }
 
@@ -1629,9 +1887,77 @@ namespace wumgr
             checkBox.AutoSize = false;
             checkBox.Margin = new Padding(2, 0, 2, 0);
             checkBox.ForeColor = UiText;
-            checkBox.Font = new Font("Segoe UI", 8.8F);
+            checkBox.Font = UiFonts.Create(8.8F);
             checkBox.BackColor = UiSurface;
             checkBox.UseVisualStyleBackColor = false;
+            RegisterChoicePainting(checkBox);
+        }
+
+        private void RegisterChoicePainting(Control control)
+        {
+            control.Paint -= choiceControl_Paint;
+            control.Paint += choiceControl_Paint;
+            control.MouseEnter += actionButton_StateChanged;
+            control.MouseLeave += actionButton_StateChanged;
+            control.GotFocus += actionButton_StateChanged;
+            control.LostFocus += actionButton_StateChanged;
+            control.EnabledChanged += actionButton_StateChanged;
+        }
+
+        private void choiceControl_Paint(object sender, PaintEventArgs e)
+        {
+            Control control = (Control)sender;
+            CheckBox checkBox = control as CheckBox;
+            RadioButton radio = control as RadioButton;
+            if (checkBox != null && checkBox.Appearance != Appearance.Normal)
+                return;
+            bool selected = checkBox != null ? checkBox.Checked : radio != null && radio.Checked;
+            bool hovered = control.Enabled && control.ClientRectangle.Contains(control.PointToClient(Cursor.Position));
+            Color foreground = control.Enabled ? control.ForeColor : UiMuted;
+            e.Graphics.Clear(control.BackColor);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            int size = Math.Max(12, (int)Math.Round(14F * e.Graphics.DpiX / 96F));
+            size = Math.Min(size, Math.Max(2, control.Height - 4));
+            Rectangle glyph = new Rectangle(1, (control.Height - size) / 2, size, size);
+            using (SolidBrush fill = new SolidBrush(selected && control.Enabled ? UiAccent : UiInput))
+            using (Pen outline = new Pen(hovered ? UiMuted : UiBorder))
+            {
+                if (radio != null)
+                {
+                    e.Graphics.FillEllipse(fill, glyph);
+                    e.Graphics.DrawEllipse(outline, glyph);
+                    if (selected)
+                        using (SolidBrush dot = new SolidBrush(control.Enabled ? UiSidebar : UiMuted))
+                            e.Graphics.FillEllipse(dot, Rectangle.Inflate(glyph, -size / 3, -size / 3));
+                }
+                else
+                {
+                    using (GraphicsPath path = CreateRoundedPath(glyph, 3))
+                    {
+                        e.Graphics.FillPath(fill, path);
+                        e.Graphics.DrawPath(outline, path);
+                    }
+                    if (selected)
+                        using (Pen mark = new Pen(control.Enabled ? UiSidebar : UiMuted, 1.6F))
+                        {
+                            mark.StartCap = mark.EndCap = LineCap.Round;
+                            mark.LineJoin = LineJoin.Round;
+                            if (checkBox.CheckState == CheckState.Indeterminate)
+                                e.Graphics.DrawLine(mark, glyph.Left + size * .25F, glyph.Top + size * .5F,
+                                    glyph.Left + size * .75F, glyph.Top + size * .5F);
+                            else
+                                e.Graphics.DrawLines(mark, new[] {
+                                    new PointF(glyph.Left + size * .22F, glyph.Top + size * .52F),
+                                    new PointF(glyph.Left + size * .43F, glyph.Top + size * .72F),
+                                    new PointF(glyph.Left + size * .78F, glyph.Top + size * .28F) });
+                        }
+                }
+            }
+            Rectangle textBounds = new Rectangle(glyph.Right + 6, 0, Math.Max(0, control.Width - glyph.Right - 6), control.Height);
+            TextRenderer.DrawText(e.Graphics, control.Text, control.Font, textBounds, foreground,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
+            if (control.Focused && ShowFocusCues)
+                ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(textBounds, -1, -3), foreground, control.BackColor);
         }
 
         private void ConfigureModernToolTips()
@@ -1653,7 +1979,7 @@ namespace wumgr
         private void modernToolTip_Popup(object sender, PopupEventArgs e)
         {
             string text = toolTip.GetToolTip(e.AssociatedControl) ?? string.Empty;
-            using (Font font = new Font("Segoe UI", 9F, FontStyle.Regular))
+            using (Font font = UiFonts.Create(9F, FontStyle.Regular))
             {
                 Size measured = TextRenderer.MeasureText(text, font, new Size(560, 0),
                     TextFormatFlags.Left | TextFormatFlags.WordBreak | TextFormatFlags.NoPrefix);
@@ -1667,7 +1993,7 @@ namespace wumgr
             using (Pen border = new Pen(UiBorder))
                 e.Graphics.DrawRectangle(border, 0, 0, Math.Max(0, e.Bounds.Width - 1), Math.Max(0, e.Bounds.Height - 1));
             Rectangle textBounds = Rectangle.Inflate(e.Bounds, -9, -6);
-            using (Font font = new Font("Segoe UI", 9F))
+            using (Font font = UiFonts.Create(9F))
                 TextRenderer.DrawText(e.Graphics, e.ToolTipText, font, textBounds, UiText,
                     TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.WordBreak |
                     TextFormatFlags.NoPrefix);
@@ -1727,7 +2053,7 @@ namespace wumgr
             control.Width = width;
             control.ForeColor = UiText;
             control.BackColor = UiSurface;
-            control.Font = new Font("Segoe UI", 8.6F, FontStyle.Regular);
+            control.Font = UiFonts.Create(8.6F, FontStyle.Regular);
 
             CheckBox checkBox = control as CheckBox;
             if (checkBox != null)
@@ -1735,6 +2061,7 @@ namespace wumgr
                 checkBox.AutoSize = false;
                 checkBox.Height = 24;
                 checkBox.UseVisualStyleBackColor = false;
+                RegisterChoicePainting(checkBox);
             }
 
             RadioButton radioButton = control as RadioButton;
@@ -1743,6 +2070,7 @@ namespace wumgr
                 radioButton.AutoSize = false;
                 radioButton.Height = 24;
                 radioButton.UseVisualStyleBackColor = false;
+                RegisterChoicePainting(radioButton);
             }
 
             ComboBox comboBox = control as ComboBox;
@@ -1993,7 +2321,7 @@ namespace wumgr
         {
             Label label = new Label();
             label.Text = text;
-            label.Font = new Font("Segoe UI", size, style, GraphicsUnit.Point);
+            label.Font = UiFonts.Create(size, style, GraphicsUnit.Point);
             label.ForeColor = color;
             label.BackColor = Color.Transparent;
             return label;
@@ -2005,8 +2333,11 @@ namespace wumgr
             {
                 if (control.Width <= 0 || control.Height <= 0)
                     return;
+                Region previous = control.Region;
                 using (GraphicsPath path = CreateRoundedPath(new Rectangle(0, 0, control.Width, control.Height), radius))
                     control.Region = new Region(path);
+                if (previous != null)
+                    previous.Dispose();
             };
             control.Resize += delegate { updateRegion(); };
             updateRegion();
@@ -2015,7 +2346,9 @@ namespace wumgr
         private static GraphicsPath CreateRoundedPath(Rectangle bounds, int radius)
         {
             GraphicsPath path = new GraphicsPath();
-            int diameter = Math.Max(2, radius * 2);
+            if (bounds.Width <= 0 || bounds.Height <= 0)
+                return path;
+            int diameter = Math.Min(Math.Min(bounds.Width, bounds.Height), Math.Max(2, radius * 2));
             Rectangle arc = new Rectangle(bounds.Left, bounds.Top, diameter, diameter);
             path.AddArc(arc, 180, 90);
             arc.X = bounds.Right - diameter;
@@ -2121,12 +2454,12 @@ namespace wumgr
                 }
 
                 Rectangle titleBounds = new Rectangle(24, centerY + 4, Math.Max(0, Width - 48), 36);
-                using (Font titleFont = new Font("Segoe UI Semibold", 16F, FontStyle.Bold))
+                using (Font titleFont = UiFonts.Create(16F, FontStyle.Bold))
                     TextRenderer.DrawText(e.Graphics, titleText, titleFont, titleBounds, UiText,
                         TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
                 Rectangle subtitleBounds = new Rectangle(24, centerY + 39, Math.Max(0, Width - 48), 28);
-                using (Font subtitleFont = new Font("Segoe UI", 9.2F, FontStyle.Regular))
+                using (Font subtitleFont = UiFonts.Create(9.2F, FontStyle.Regular))
                     TextRenderer.DrawText(e.Graphics, subtitleText, subtitleFont, subtitleBounds, UiMuted,
                         TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
@@ -2571,7 +2904,7 @@ namespace wumgr
             {
                 DoubleBuffered = true;
                 ResizeRedraw = true;
-                BackColor = UiInput;
+                BackColor = UiSurface;
                 animationTimer = new Timer();
                 animationTimer.Interval = 28;
                 animationTimer.Tick += delegate
@@ -2594,14 +2927,14 @@ namespace wumgr
                     return;
 
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle bounds = new Rectangle(0, 0, Width - 1, Height - 1);
+                Rectangle bounds = new Rectangle(1, 1, Width - 3, Height - 3);
                 using (GraphicsPath path = CreateRoundedPath(bounds, Math.Min(6, Height / 2)))
-                using (SolidBrush background = new SolidBrush(UiInput))
-                using (Pen border = new Pen(UiBorder))
+                using (SolidBrush background = new SolidBrush(UiBorder))
+                using (Pen border = new Pen(UiMuted))
                 {
                     e.Graphics.FillPath(background, path);
                     e.Graphics.DrawPath(border, path);
-                    Region oldClip = e.Graphics.Clip;
+                    GraphicsState oldClip = e.Graphics.Save();
                     e.Graphics.SetClip(path);
                     using (SolidBrush fill = new SolidBrush(UiAccent))
                     {
@@ -2609,24 +2942,24 @@ namespace wumgr
                         {
                             int segment = Math.Max(28, Width / 4);
                             int x = animationOffset % (Width + segment) - segment;
-                            Rectangle segmentBounds = new Rectangle(x, 2, segment, Math.Max(1, Height - 4));
+                            Rectangle segmentBounds = new Rectangle(x, 3, segment, Math.Max(1, Height - 6));
                             using (GraphicsPath segmentPath = CreateRoundedPath(segmentBounds,
                                 Math.Max(2, segmentBounds.Height / 2)))
                                 e.Graphics.FillPath(fill, segmentPath);
                         }
                         else
                         {
-                            int fillWidth = (int)((Width - 2) * (progressValue / 100.0));
+                            int fillWidth = (int)((Width - 6) * (progressValue / 100.0));
                             if (fillWidth > 0)
                             {
-                                Rectangle fillBounds = new Rectangle(1, 2, fillWidth, Math.Max(1, Height - 4));
+                                Rectangle fillBounds = new Rectangle(3, 3, fillWidth, Math.Max(1, Height - 6));
                                 using (GraphicsPath fillPath = CreateRoundedPath(fillBounds,
                                     Math.Max(2, fillBounds.Height / 2)))
                                     e.Graphics.FillPath(fill, fillPath);
                             }
                         }
                     }
-                    e.Graphics.Clip = oldClip;
+                    e.Graphics.Restore(oldClip);
                 }
             }
 
@@ -2656,8 +2989,11 @@ namespace wumgr
                 base.OnResize(eventargs);
                 if (Width <= 0 || Height <= 0)
                     return;
+                Region previous = Region;
                 using (GraphicsPath path = CreateRoundedPath(new Rectangle(0, 0, Width, Height), CornerRadius))
                     Region = new Region(path);
+                if (previous != null)
+                    previous.Dispose();
             }
 
             protected override void OnPaint(PaintEventArgs e)
@@ -2666,7 +3002,7 @@ namespace wumgr
                 if (BorderColor == Color.Transparent || Width <= 1 || Height <= 1)
                     return;
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                using (GraphicsPath path = CreateRoundedPath(new Rectangle(0, 0, Width - 1, Height - 1), CornerRadius))
+                using (GraphicsPath path = CreateRoundedPath(new Rectangle(1, 1, Width - 3, Height - 3), Math.Max(1, CornerRadius - 1)))
                 using (Pen pen = new Pen(BorderColor))
                     e.Graphics.DrawPath(pen, path);
             }
@@ -2772,6 +3108,10 @@ namespace wumgr
                 comboBox.HandleCreated += comboBox_HandleCreated;
                 comboBox.HandleDestroyed += comboBox_HandleDestroyed;
                 comboBox.EnabledChanged += comboBox_StateChanged;
+                comboBox.GotFocus += comboBox_StateChanged;
+                comboBox.LostFocus += comboBox_StateChanged;
+                comboBox.MouseEnter += comboBox_StateChanged;
+                comboBox.MouseLeave += comboBox_StateChanged;
                 if (comboBox.IsHandleCreated)
                 {
                     AssignHandle(comboBox.Handle);
@@ -2811,7 +3151,8 @@ namespace wumgr
                 Rectangle area = new Rectangle(comboBox.Width - arrowWidth, 1, arrowWidth - 1, comboBox.Height - 2);
                 using (Graphics graphics = Graphics.FromHwnd(Handle))
                 using (SolidBrush fill = new SolidBrush(background))
-                using (Pen borderPen = new Pen(border))
+                using (Pen borderPen = new Pen(comboBox.Enabled && (comboBox.Focused || comboBox.DroppedDown ||
+                    comboBox.ClientRectangle.Contains(comboBox.PointToClient(Cursor.Position))) ? arrow : border))
                 using (SolidBrush arrowBrush = new SolidBrush(comboBox.Enabled ? arrow : Color.FromArgb(86, 98, 119)))
                 {
                     graphics.FillRectangle(fill, area);
@@ -2876,6 +3217,10 @@ namespace wumgr
 
         private void UpdateModernPage()
         {
+            foreach (CheckBox navigation in new[] { btnWinUpd, btnInstalled, btnHidden, btnHistory,
+                modernPackageUpdatesButton, modernOtaUpdatesButton, modernSettingsButton })
+                if (navigation != null)
+                    navigation.Invalidate();
             if (modernPageTitle == null)
                 return;
 

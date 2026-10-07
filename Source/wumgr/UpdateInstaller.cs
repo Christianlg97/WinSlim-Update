@@ -18,7 +18,7 @@ namespace wumgr
         private int mCurrentTask = 0;
         private Thread mThread = null;
         private Dispatcher mDispatcher;
-        private bool Canceled = false;
+        private volatile bool Canceled = false;
         private bool RebootRequired = false;
         private int ErrorCount = 0;
         private bool DoInstall = true;
@@ -125,10 +125,10 @@ namespace wumgr
         {
             List<string> Files = (List<string>)parameters;
 
-            bool ok = true;
+            bool ok = Files != null && Files.Count > 0;
             bool reboot = false;
 
-            foreach (string CurFile in Files)
+            foreach (string CurFile in Files ?? new List<string>())
             {
                 if (Canceled)
                     break;
@@ -148,12 +148,13 @@ namespace wumgr
                         if (!Directory.Exists(path)) // is it already unpacked?
                             ZipFile.ExtractToDirectory(File, path);
 
-                        string supportedExtensions = "*.msu,*.msi,*.cab,*.exe";
-                        var foundFiles = Directory.GetFiles(path, "*.*", SearchOption.AllDirectories).Where(s => supportedExtensions.Contains(Path.GetExtension(s).ToLower()));
-                        if (foundFiles.Count() == 0)
+                        string[] supportedExtensions = { ".msu", ".msi", ".cab", ".exe" };
+                        string foundFile = Directory.EnumerateFiles(path, "*.*", SearchOption.AllDirectories)
+                            .FirstOrDefault(s => supportedExtensions.Contains(Path.GetExtension(s), StringComparer.OrdinalIgnoreCase));
+                        if (foundFile == null)
                             throw new System.IO.FileNotFoundException("Expected file not found in zip");
 
-                        File = foundFiles.First();
+                        File = foundFile;
                         ext = Path.GetExtension(File);
                     }
 
@@ -186,7 +187,7 @@ namespace wumgr
             }
 
             mDispatcher.BeginInvoke(new Action(() => {
-                OnFinished(ok, reboot);
+                OnFinished(ok && !Canceled, reboot);
             }));
         }
 
@@ -229,7 +230,8 @@ namespace wumgr
         {
             try
             {
-                Process proc = new Process();
+                using (Process proc = new Process())
+                {
                 proc.StartInfo.FileName = Environment.ExpandEnvironmentVariables(@"%SystemRoot%\System32\Dism.exe");
                 proc.StartInfo.Arguments = "/Online /Get-PackageInfo /PackagePath:\"" + fileName + "\" /English";
                 proc.StartInfo.RedirectStandardOutput = true;
@@ -238,10 +240,15 @@ namespace wumgr
                 proc.StartInfo.CreateNoWindow = true;
                 proc.EnableRaisingEvents = true;
                 proc.Start();
+                Task<string> output = proc.StandardOutput.ReadToEndAsync();
+                Task<string> error = proc.StandardError.ReadToEndAsync();
                 proc.WaitForExit();
-                while (!proc.StandardOutput.EndOfStream)
+                Task.WaitAll(output, error);
+                if (proc.ExitCode != 0)
+                    return false;
+                foreach (string outputLine in output.Result.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
                 {
-                    string[] line = proc.StandardOutput.ReadLine().Split(':');
+                    string[] line = outputLine.Split(new[] { ':' }, 2);
                     if (line.Length != 2)
                         continue;
                     
@@ -249,6 +256,7 @@ namespace wumgr
                         continue;
 
                     return line[1].Trim().Equals("Yes", StringComparison.CurrentCultureIgnoreCase);
+                }
                 }
             }
             catch (Exception e)
@@ -282,13 +290,19 @@ namespace wumgr
                 startInfo.CreateNoWindow = true;
             }
 
-            Process proc = new Process();
+            using (Process proc = new Process())
+            {
             proc.StartInfo = startInfo;
             proc.EnableRaisingEvents = true;
             proc.Start();
+            Task<string> output = silent ? proc.StandardOutput.ReadToEndAsync() : null;
+            Task<string> error = silent ? proc.StandardError.ReadToEndAsync() : null;
             proc.WaitForExit();
+            if (silent)
+                Task.WaitAll(output, error);
 
             return proc.ExitCode;
+            }
         }
 
         public void RunUnInstall(object parameters)

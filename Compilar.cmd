@@ -5,9 +5,6 @@ title Compilador de WinSlim Update
 
 set "ROOT=%~dp0"
 set "ASSEMBLY_INFO=%ROOT%Source\wumgr\Properties\AssemblyInfo.cs"
-set "PROJECT=%ROOT%Source\wumgr\wumgr.csproj"
-set "SOLUTION=%ROOT%Source\wumgr.sln"
-set "OUTPUT=%ROOT%Source\wumgr\bin\Release"
 set "RELEASE=%ROOT%Release"
 
 echo ============================================================
@@ -42,9 +39,9 @@ if not defined NEW_VERSION (
     goto :ask_version
 )
 
-powershell -NoProfile -Command "if ($env:NEW_VERSION -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') { exit 1 }; $parts = $env:NEW_VERSION.Split('.'); foreach ($part in $parts) { $number = 0; if (-not [uint16]::TryParse($part, [ref]$number)) { exit 1 } }; exit 0"
+powershell -NoProfile -Command "if ($env:NEW_VERSION -notmatch '^\d+\.\d+\.\d+(?:\.\d+)?$') { exit 1 }; $parts = $env:NEW_VERSION.Split('.'); foreach ($part in $parts) { $number = 0; if (-not [uint16]::TryParse($part, [ref]$number) -or $number -ge 65535) { exit 1 } }; exit 0"
 if errorlevel 1 (
-    echo [ERROR] Formato no válido. Usa X.Y.Z o X.Y.Z.W, con valores entre 0 y 65535.
+    echo [ERROR] Formato no válido. Usa X.Y.Z o X.Y.Z.W, con valores entre 0 y 65534.
     goto :ask_version
 )
 
@@ -69,68 +66,8 @@ echo Versión actualizada a: %CURRENT_VERSION%
 
 :build
 echo.
-echo Buscando MSBuild...
-set "MSBUILD="
-set "VSROOT="
-set "VSINSTALLER=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer"
-if not exist "%VSINSTALLER%\vswhere.exe" set "VSINSTALLER=%ProgramFiles%\Microsoft Visual Studio\Installer"
-if exist "%VSINSTALLER%\vswhere.exe" (
-    for /f "usebackq delims=" %%R in (`call "%VSINSTALLER%\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -property installationPath`) do set "VSROOT=%%R"
-    for /f "usebackq delims=" %%M in (`call "%VSINSTALLER%\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe`) do set "MSBUILD=%%M"
-)
-if not defined MSBUILD for %%E in (BuildTools Community Professional Enterprise) do (
-    if not defined MSBUILD if exist "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\%%E\MSBuild\Current\Bin\MSBuild.exe" set "MSBUILD=%ProgramFiles(x86)%\Microsoft Visual Studio\2022\%%E\MSBuild\Current\Bin\MSBuild.exe"
-    if not defined MSBUILD if exist "%ProgramFiles%\Microsoft Visual Studio\2022\%%E\MSBuild\Current\Bin\MSBuild.exe" set "MSBUILD=%ProgramFiles%\Microsoft Visual Studio\2022\%%E\MSBuild\Current\Bin\MSBuild.exe"
-)
-
-if not defined MSBUILD (
-    echo [ERROR] No se encontró el MSBuild de Visual Studio 2022.
-    echo Instala Visual Studio Build Tools con la carga de trabajo "Herramientas de compilación de escritorio de .NET".
-    echo El MSBuild antiguo de %WINDIR%\Microsoft.NET no sirve: su compilador de C# 5 no admite el código actual.
-    goto :error
-)
-echo MSBuild: %MSBUILD%
-
-rem Sin el targeting pack del .NET Framework del proyecto, MSBuild falla con MSB3644.
-set "TARGET_FX="
-for /f "usebackq delims=" %%T in (`powershell -NoProfile -Command "$m = Select-String -LiteralPath $env:PROJECT -Pattern '<TargetFrameworkVersion>(v[0-9.]+)<' | Select-Object -First 1; if ($m) { $m.Matches[0].Groups[1].Value }"`) do set "TARGET_FX=%%T"
-set "REFASM="
-if defined TARGET_FX set "FX_NUMBER=%TARGET_FX:v=%"
-if defined TARGET_FX set "REFASM=%ProgramFiles(x86)%\Reference Assemblies\Microsoft\Framework\.NETFramework\%TARGET_FX%"
-if defined TARGET_FX if not exist "%REFASM%\mscorlib.dll" set "REFASM=%ProgramFiles%\Reference Assemblies\Microsoft\Framework\.NETFramework\%TARGET_FX%"
-if defined TARGET_FX if not exist "%REFASM%\mscorlib.dll" (
-    echo [ERROR] No está instalado el targeting pack de .NET Framework %FX_NUMBER%, necesario para compilar.
-    echo Abre Visual Studio Installer, pulsa Modificar y marca el componente individual
-    echo ".NET Framework %FX_NUMBER% targeting pack", o ejecuta como administrador:
-    if defined VSROOT echo   "%VSINSTALLER%\setup.exe" modify --installPath "%VSROOT%" --add Microsoft.Net.Component.%FX_NUMBER%.TargetingPack --passive --norestart
-    goto :error
-)
-
-echo Compilando WinSlim Update %CURRENT_VERSION% en modo Release...
-echo.
-"%MSBUILD%" "%SOLUTION%" /t:Rebuild /p:Configuration=Release /v:minimal
-if errorlevel 1 (
-    echo.
-    echo [ERROR] La compilación no se completó correctamente.
-    goto :error
-)
-
-if not exist "%OUTPUT%\WinSlimUpdate.exe" (
-    echo [ERROR] La compilación terminó, pero no se encontró WinSlimUpdate.exe.
-    goto :error
-)
-
-echo.
-echo Copiando el resultado a la carpeta Release...
-if not exist "%RELEASE%" mkdir "%RELEASE%"
-copy /Y "%OUTPUT%\WinSlimUpdate.exe" "%RELEASE%\WinSlimUpdate.exe" >nul
-if errorlevel 1 (
-    echo [ERROR] No se pudo reemplazar Release\WinSlimUpdate.exe.
-    echo Cierra WinSlim Update si está abierto y vuelve a ejecutar este compilador.
-    goto :error
-)
-if exist "%OUTPUT%\WinSlimUpdate.pdb" copy /Y "%OUTPUT%\WinSlimUpdate.pdb" "%RELEASE%\WinSlimUpdate.pdb" >nul
-if exist "%OUTPUT%\WinSlimUpdate.exe.config" copy /Y "%OUTPUT%\WinSlimUpdate.exe.config" "%RELEASE%\WinSlimUpdate.exe.config" >nul
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%Source\build-release.ps1" -Configuration Release -CopyToRelease
+if errorlevel 1 goto :error
 
 echo.
 echo ============================================================

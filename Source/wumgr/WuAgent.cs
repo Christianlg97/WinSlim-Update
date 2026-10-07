@@ -13,6 +13,7 @@ using System.Windows.Forms;
 using System.ServiceProcess;
 using System.Collections.Specialized;
 using System.Globalization;
+using System.Diagnostics;
 
 namespace wumgr
 {
@@ -23,6 +24,9 @@ namespace wumgr
         IUpdateService mOfflineService = null;
         IUpdateSearcher mUpdateSearcher = null;
         ISearchJob mSearchJob = null;
+        private Stopwatch searchWatch;
+        private TimeSpan nextSearchNotice;
+        private CancellationTokenSource searchPreparation;
         WUApiLib.UpdateDownloader mDownloader = null;
         IDownloadJob mDownloadJob = null;
         IUpdateInstaller mInstaller = null;
@@ -34,6 +38,66 @@ namespace wumgr
         public List<MsUpdate> mHiddenUpdates = new List<MsUpdate>();
 
         protected Dispatcher mDispatcher = null;
+        private SynchronizationContext searchUiContext;
+        private ISearchJob searchPollJob;
+        private DateTime nextSearchPoll;
+
+        public void PollSearchCompletion()
+        {
+            ISearchJob job = mSearchJob;
+            if (job == null)
+                return;
+            if (searchWatch != null && searchWatch.Elapsed >= nextSearchNotice)
+            {
+                AppLog.Line("Windows Update sigue procesando la consulta ({0:F0} s); aún no ha devuelto el resultado.", searchWatch.Elapsed.TotalSeconds);
+                nextSearchNotice = searchWatch.Elapsed.Add(TimeSpan.FromSeconds(30));
+            }
+            if (DateTime.UtcNow < nextSearchPoll ||
+                Interlocked.CompareExchange(ref searchPollJob, job, null) != null)
+                return;
+            nextSearchPoll = DateTime.UtcNow.AddSeconds(1);
+            Task.Run(() =>
+            {
+                try
+                {
+                    if (job.IsCompleted)
+                        PostSearchToUi(() => OnUpdatesFound(job));
+                }
+                catch (Exception error)
+                {
+                    PostSearchToUi(() =>
+                    {
+                        if (job == mSearchJob)
+                            AppLog.Line("No se pudo comprobar el estado de búsqueda: " + error.Message);
+                    });
+                }
+                finally { Interlocked.CompareExchange(ref searchPollJob, null, job); }
+            });
+        }
+
+        public void SetSearchUiContext(SynchronizationContext context)
+        {
+            searchUiContext = context;
+        }
+
+        private void PostSearchToUi(Action action)
+        {
+            if (searchUiContext != null)
+                searchUiContext.Post(delegate { action(); }, null);
+            else
+                mDispatcher.BeginInvoke(action);
+        }
+
+        private void CompleteSearchOnUi(ISearchJob job)
+        {
+            // Preserve the native callback lifetime while consuming its result.
+            // RequestAbort runs off the UI thread, so this handoff cannot block
+            // a UI-thread abort waiting for the same callback.
+            if (searchUiContext != null)
+                searchUiContext.Send(delegate { OnUpdatesFound(job); }, null);
+            else
+                mDispatcher.Invoke(new Action(() => OnUpdatesFound(job)));
+        }
 
         public string dlPath = null;
 
@@ -293,7 +357,7 @@ namespace wumgr
 
                 mUpdateSearcher.ServerSelection = ServerSelection.ssOthers;
                 mUpdateSearcher.ServiceID = mOfflineService.ServiceID;
-                //mUpdateSearcher.Online = false;
+                mUpdateSearcher.Online = false;
             }
             catch (Exception err)
             {
@@ -344,13 +408,14 @@ namespace wumgr
 
         private void SetOnline(string ServiceName)
         {
+            ConfigureOnlineSearcher(mUpdateSearcher, null, false);
             foreach (IUpdateService service in mUpdateServiceManager.Services)
             {
                 if (service.Name.Equals(ServiceName, StringComparison.CurrentCultureIgnoreCase))
                 {
-                    mUpdateSearcher.ServerSelection = ServerSelection.ssDefault;
-                    mUpdateSearcher.ServiceID = service.ServiceID;
-                    //mUpdateSearcher.Online = true;
+                    ConfigureOnlineSearcher(mUpdateSearcher, service.ServiceID, service.IsManaged);
+                    AppLog.Line("Origen de búsqueda: " + service.Name);
+                    return;
                 }
             }
         }
@@ -375,21 +440,25 @@ namespace wumgr
 
         public RetCodes SearchForUpdates(String Source = "", bool IncludePotentiallySupersededUpdates = false)
         {
-            if (mCallback != null)
+            if (IsBusy() || mCallback != null)
                 return RetCodes.Busy;
 
+            // A previous cancelled job may still be winding down in WUA.
+            // Keep the next operation's searcher separate from that job.
+            mUpdateSearcher = mUpdateSession.CreateUpdateSearcher();
             mUpdateSearcher.IncludePotentiallySupersededUpdates = IncludePotentiallySupersededUpdates;
 
             SetOnline(Source);
 
-            return SearchForUpdates();
+            return StartWindowsSearch(true);
         }
 
         public RetCodes SearchForUpdates(bool Download, bool IncludePotentiallySupersededUpdates = false)
         {
-            if (mCallback != null)
+            if (IsBusy() || mCallback != null)
                 return RetCodes.Busy;
 
+            mUpdateSearcher = mUpdateSession.CreateUpdateSearcher();
             mUpdateSearcher.IncludePotentiallySupersededUpdates = IncludePotentiallySupersededUpdates;
 
             if (Download)
@@ -414,7 +483,7 @@ namespace wumgr
             if (ret < 0)
                 return ret;
 
-            return SearchForUpdates();
+            return StartWindowsSearch(false);
         }
 
         private RetCodes OnWuError(Exception err)
@@ -432,10 +501,60 @@ namespace wumgr
             return ret;
         }
 
-        private RetCodes SearchForUpdates()
+        private RetCodes StartWindowsSearch(bool restartService)
         {
             mCurOperation = AgentOperation.CheckingUpdates;
             OnProgress(-1, 0, 0, 0);
+
+            if (restartService)
+            {
+                ServerSelection selection = mUpdateSearcher.ServerSelection;
+                string serviceId = selection == ServerSelection.ssOthers ? mUpdateSearcher.ServiceID : null;
+                bool online = mUpdateSearcher.Online;
+                bool superseded = mUpdateSearcher.IncludePotentiallySupersededUpdates;
+                CancellationTokenSource preparation = new CancellationTokenSource();
+                searchPreparation = preparation;
+                Task.Run(() =>
+                {
+                    Exception failure = null;
+                    try { WindowsUpdateServiceRecovery.Restart(message => AppLog.Line(message)); }
+                    catch (Exception error) { failure = error; }
+                    PostSearchToUi(() =>
+                    {
+                        bool cancelled = preparation.IsCancellationRequested;
+                        searchPreparation = null;
+                        preparation.Dispose();
+                        if (cancelled)
+                        {
+                            OnFinished(RetCodes.Abborted);
+                            return;
+                        }
+                        if (failure != null)
+                        {
+                            AppLog.Line("No se pudo preparar Windows Update: " + failure.Message);
+                            OnFinished(RetCodes.InternalError);
+                            return;
+                        }
+                        try
+                        {
+                            // Restarting the service can invalidate the previous COM searcher.
+                            mUpdateSearcher = mUpdateSession.CreateUpdateSearcher();
+                            mUpdateSearcher.ServerSelection = selection;
+                            if (selection == ServerSelection.ssOthers) mUpdateSearcher.ServiceID = serviceId;
+                            mUpdateSearcher.Online = online;
+                            mUpdateSearcher.IncludePotentiallySupersededUpdates = superseded;
+                            BeginWindowsSearch();
+                        }
+                        catch (Exception error) { OnWuError(error); }
+                    });
+                });
+                return RetCodes.InProgress;
+            }
+            return BeginWindowsSearch();
+        }
+
+        private RetCodes BeginWindowsSearch()
+        {
 
             mCallback = new UpdateCallback(this);
 
@@ -451,7 +570,13 @@ namespace wumgr
                     query = "(IsInstalled = 0 and IsHidden = 0) or (IsInstalled = 1 and IsHidden = 0) or (IsHidden = 1)";
                 else
                     query = "(IsInstalled = 0 and IsHidden = 0 and DeploymentAction=*) or (IsInstalled = 1 and IsHidden = 0 and DeploymentAction=*) or (IsHidden = 1 and DeploymentAction=*)";
+                AppLog.Line("Enviando consulta a Windows Update (origen: {0}, online: {1}).", mUpdateSearcher.ServerSelection, mUpdateSearcher.Online);
                 mSearchJob = mUpdateSearcher.BeginSearch(query, mCallback, null);
+                Interlocked.Exchange(ref searchPollJob, null);
+                nextSearchPoll = DateTime.MinValue;
+                nextSearchNotice = TimeSpan.FromSeconds(30);
+                searchWatch = Stopwatch.StartNew();
+                AppLog.Line("Consulta aceptada por Windows Update; esperando respuesta.");
             }
             catch (Exception err)
             {
@@ -480,14 +605,51 @@ namespace wumgr
 
         public void CancelOperations()
         {
+            if (mCurOperation == AgentOperation.CancelingOperation)
+                return;
             if(IsBusy())
                 mCurOperation = AgentOperation.CancelingOperation;
+
+            if (searchPreparation != null)
+            {
+                searchPreparation.Cancel();
+                // Finish restoring the service before abandoning this search.
+                OnProgress(-1, 0, 0, 0);
+                return;
+            }
 
             // Note: at any given time only one (or none) of the 3 conditions can be true
             if (mCallback != null)
             {
                 if (mSearchJob != null)
-                    mSearchJob.RequestAbort();
+                {
+                    ISearchJob searchJob = mSearchJob;
+                    IUpdateSearcher searcher = mUpdateSearcher;
+                    mSearchJob = null;
+                    Interlocked.Exchange(ref searchPollJob, null);
+                    mCallback = null;
+                    searchWatch = null;
+                    AppLog.Line("Búsqueda cancelada; liberando la operación de Windows Update en segundo plano.");
+                    OnFinished(RetCodes.Abborted);
+                    Task.Run(() =>
+                    {
+                        try { searchJob.RequestAbort(); }
+                        catch (Exception error)
+                        {
+                            PostSearchToUi(() => AppLog.Line("El servicio no aceptó el aborto de la búsqueda descartada: " + error.Message));
+                        }
+                        try
+                        {
+                            searchJob.CleanUp();
+                            searcher.EndSearch(searchJob);
+                        }
+                        catch (Exception error)
+                        {
+                            PostSearchToUi(() => AppLog.Line("Finalización de la búsqueda descartada: " + error.Message));
+                        }
+                    });
+                    return;
+                }
 
                 if (mDownloadJob != null)
                     mDownloadJob.RequestAbort();
@@ -599,13 +761,18 @@ namespace wumgr
 
             if (mCurOperation == AgentOperation.PreparingCheck)
             {
+                if (!args.Success)
+                {
+                    OnFinished(RetCodes.DownloadFailed);
+                    return;
+                }
                 AppLog.Line("Se ha descargado wsusscn2.cab.");
 
                 RetCodes ret = ClearOffline();
                 if (ret == RetCodes.Success)
                     ret = SetupOffline();
                 if (ret == RetCodes.Success)
-                    ret = SearchForUpdates();
+                    ret = StartWindowsSearch(false);
                 if (ret <= 0)
                     OnFinished(ret);
             }
@@ -614,7 +781,7 @@ namespace wumgr
                 MultiValueDictionary<string, string> AllFiles = new MultiValueDictionary<string, string>();
                 foreach (UpdateDownloader.Task task in args.Downloads)
                 {
-                    if (task.Failed && task.FileName != null)
+                    if (task.Failed || string.IsNullOrEmpty(task.FileName) || !File.Exists(Path.Combine(task.Path, task.FileName)))
                         continue;
                     AllFiles.Add(task.KB, task.Path + @"\" + task.FileName);
                 }
@@ -672,6 +839,15 @@ namespace wumgr
             if (mCurOperation == AgentOperation.CancelingOperation)
                 ret = RetCodes.Abborted;
             OnFinished(ret, args.Reboot);
+        }
+
+        private static void ConfigureOnlineSearcher(IUpdateSearcher searcher, string serviceId, bool managed)
+        {
+            searcher.ServerSelection = string.IsNullOrEmpty(serviceId) ? ServerSelection.ssDefault :
+                managed ? ServerSelection.ssManagedServer : ServerSelection.ssOthers;
+            if (!string.IsNullOrEmpty(serviceId) && !managed)
+                searcher.ServiceID = serviceId;
+            searcher.Online = true;
         }
 
         void InstallItemFinished(object sender, UpdateInstaller.ItemFinishedEventArgs args)
@@ -888,6 +1064,7 @@ namespace wumgr
                 return;
             mSearchJob = null;
             mCallback = null;
+            bool cancelled = mCurOperation == AgentOperation.CancelingOperation;
 
             ISearchResult SearchResults = null;
             try
@@ -896,39 +1073,89 @@ namespace wumgr
             }
             catch (Exception err)
             {
-                AppLog.Line("La búsqueda de actualizaciones ha fallado.");
-                LogError(err);
-                OnFinished(RetCodes.InternalError);
+                searchWatch = null;
+                if (!cancelled)
+                {
+                    AppLog.Line("La búsqueda de actualizaciones ha fallado.");
+                    LogError(err);
+                }
+                OnFinished(cancelled ? RetCodes.Abborted : RetCodes.InternalError);
                 return;
             }
 
-            mPendingUpdates.Clear();
-            mInstalledUpdates.Clear();
-            mHiddenUpdates.Clear();
-            mIsValid = true;
-
-            foreach (IUpdate update in SearchResults.Updates)
+            finally
             {
-                if (update.IsHidden)
-                    mHiddenUpdates.Add(new MsUpdate(update, MsUpdate.UpdateState.Hidden));
-                else if (update.IsInstalled)
-                    mInstalledUpdates.Add(new MsUpdate(update, MsUpdate.UpdateState.Installed));
-                else
-                    mPendingUpdates.Add(new MsUpdate(update, MsUpdate.UpdateState.Pending));
-                Console.WriteLine(update.Title);
+                // CleanUp waits for callbacks. Run it outside the callback/UI
+                // thread, including when EndSearch throws or search is aborted.
+                Task.Run(() =>
+                {
+                    try { searchJob.CleanUp(); }
+                    catch (Exception error) { PostSearchToUi(() => AppLog.Line("No se pudo liberar la búsqueda: " + error.Message)); }
+                });
             }
-
-            AppLog.Line("Se encontraron {0} actualizaciones pendientes.", mPendingUpdates.Count);
-
-            OnUpdatesChanged(true);
-
+            if (searchWatch != null)
+            {
+                AppLog.Line("Consulta de Windows Update: {0:F1} s.", searchWatch.Elapsed.TotalSeconds);
+                searchWatch = null;
+            }
+            if (cancelled)
+            {
+                OnFinished(RetCodes.Abborted);
+                return;
+            }
             RetCodes ret = RetCodes.Undefined;
-            if (SearchResults.ResultCode == OperationResultCode.orcSucceeded || SearchResults.ResultCode == OperationResultCode.orcSucceededWithErrors)
-                ret = RetCodes.Success;
-            else if (SearchResults.ResultCode == OperationResultCode.orcAborted)
-                ret = RetCodes.Abborted;
-            else if (SearchResults.ResultCode == OperationResultCode.orcFailed)
+            try
+            {
+                if (SearchResults.ResultCode == OperationResultCode.orcAborted)
+                {
+                    OnFinished(RetCodes.Abborted);
+                    return;
+                }
+                if (SearchResults.ResultCode != OperationResultCode.orcSucceeded &&
+                    SearchResults.ResultCode != OperationResultCode.orcSucceededWithErrors)
+                {
+                    AppLog.Line("La búsqueda no terminó correctamente: " + SearchResults.ResultCode);
+                    OnFinished(RetCodes.InternalError);
+                    return;
+                }
+                Stopwatch processing = Stopwatch.StartNew();
+                List<MsUpdate> pending = new List<MsUpdate>();
+                List<MsUpdate> installed = new List<MsUpdate>();
+                List<MsUpdate> hidden = new List<MsUpdate>();
+
+                foreach (IUpdate update in SearchResults.Updates)
+                {
+                    MsUpdate.UpdateState state = update.IsHidden ? MsUpdate.UpdateState.Hidden :
+                        update.IsInstalled ? MsUpdate.UpdateState.Installed : MsUpdate.UpdateState.Pending;
+                    MsUpdate model = new MsUpdate(update, state);
+                    if (state == MsUpdate.UpdateState.Hidden) hidden.Add(model);
+                    else if (state == MsUpdate.UpdateState.Installed) installed.Add(model);
+                    else pending.Add(model);
+                    Console.WriteLine(model.Title);
+                }
+                mPendingUpdates.Clear(); mPendingUpdates.AddRange(pending);
+                mInstalledUpdates.Clear(); mInstalledUpdates.AddRange(installed);
+                mHiddenUpdates.Clear(); mHiddenUpdates.AddRange(hidden);
+                mIsValid = true;
+
+                AppLog.Line("Se encontraron {0} actualizaciones pendientes.", mPendingUpdates.Count);
+
+                OnUpdatesChanged(true);
+                AppLog.Line("Preparación de resultados e interfaz: {0:F1} s.", processing.Elapsed.TotalSeconds);
+
+                if (SearchResults.ResultCode == OperationResultCode.orcSucceeded || SearchResults.ResultCode == OperationResultCode.orcSucceededWithErrors)
+                    ret = RetCodes.Success;
+                else if (SearchResults.ResultCode == OperationResultCode.orcAborted)
+                    ret = RetCodes.Abborted;
+                else if (SearchResults.ResultCode == OperationResultCode.orcFailed)
+                    ret = RetCodes.InternalError;
+            }
+            catch (Exception error)
+            {
+                mIsValid = false;
+                LogError(error);
                 ret = RetCodes.InternalError;
+            }
             OnFinished(ret);
         }
 
@@ -1244,9 +1471,7 @@ namespace wumgr
             public void Invoke(ISearchJob searchJob, ISearchCompletedCallbackArgs e)
             {
                 // !!! warning this function is invoced from a different thread !!!            
-                agent.mDispatcher.Invoke(new Action(() => {
-                    agent.OnUpdatesFound(searchJob);
-                }));
+                agent.CompleteSearchOnUi(searchJob);
             }
 
             // Implementation of IDownloadProgressChangedCallback interface...

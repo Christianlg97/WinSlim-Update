@@ -30,7 +30,7 @@ namespace wumgr
             AccessibleName = Text;
             BackColor = DialogBorder;
             ForeColor = DialogText;
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
+            Font = UiFonts.Create(9.5F, FontStyle.Regular, GraphicsUnit.Point);
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.CenterParent;
             ShowInTaskbar = false;
@@ -66,7 +66,7 @@ namespace wumgr
             diagnosticBox.BorderStyle = BorderStyle.None;
             diagnosticBox.BackColor = DialogSurface;
             diagnosticBox.ForeColor = Color.FromArgb(208, 208, 208);
-            diagnosticBox.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            diagnosticBox.Font = UiFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
             diagnosticBox.ReadOnly = true;
             diagnosticBox.WordWrap = false;
             diagnosticBox.ScrollBars = RichTextBoxScrollBars.Both;
@@ -111,7 +111,7 @@ namespace wumgr
             title.Margin = Padding.Empty;
             title.Text = "No se pudo actualizar " + packageName;
             title.ForeColor = DialogText;
-            title.Font = new Font("Segoe UI Semibold", 16F, FontStyle.Bold, GraphicsUnit.Point);
+            title.Font = UiFonts.Create(16F, FontStyle.Bold, GraphicsUnit.Point);
             title.TextAlign = ContentAlignment.MiddleLeft;
             title.AutoEllipsis = true;
 
@@ -120,7 +120,7 @@ namespace wumgr
             close.Dock = DockStyle.Fill;
             close.Margin = new Padding(4, 4, 0, 8);
             close.Text = "×";
-            close.Font = new Font("Segoe UI", 15F, FontStyle.Regular, GraphicsUnit.Point);
+            close.Font = UiFonts.Create(15F, FontStyle.Regular, GraphicsUnit.Point);
             close.ForeColor = DialogMuted;
             close.BackColor = DialogBackground;
             close.FlatStyle = FlatStyle.Flat;
@@ -159,7 +159,7 @@ namespace wumgr
             reason.Margin = Padding.Empty;
             reason.Text = reasonText;
             reason.ForeColor = DialogText;
-            reason.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
+            reason.Font = UiFonts.Create(10F, FontStyle.Regular, GraphicsUnit.Point);
             reason.TextAlign = ContentAlignment.MiddleLeft;
             reason.AutoEllipsis = true;
 
@@ -174,7 +174,7 @@ namespace wumgr
                 + Environment.NewLine
                 + "La operación se ejecutó como administrador. El diagnóstico contiene toda la evidencia disponible.";
             hint.ForeColor = DialogMuted;
-            hint.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            hint.Font = UiFonts.Create(9F, FontStyle.Regular, GraphicsUnit.Point);
             hint.TextAlign = ContentAlignment.MiddleLeft;
             hint.AutoEllipsis = true;
 
@@ -245,7 +245,7 @@ namespace wumgr
             button.Text = text;
             button.BackColor = DialogButton;
             button.ForeColor = DialogText;
-            button.Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold, GraphicsUnit.Point);
+            button.Font = UiFonts.Create(9.5F, FontStyle.Bold, GraphicsUnit.Point);
             button.FlatStyle = FlatStyle.Flat;
             button.FlatAppearance.BorderSize = 0;
             button.FlatAppearance.MouseOverBackColor = DialogButtonHover;

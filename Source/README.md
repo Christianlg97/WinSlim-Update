@@ -50,7 +50,11 @@ La aplicación no instala nada sin una acción explícita del usuario.
 
 El proyecto usa Windows Forms y .NET Framework 4.6.1. Desde la raíz del repositorio ejecuta `Compilar.cmd`: muestra la versión actual, permite cambiarla y genera la compilación Release. Como alternativa, abre `wumgr.sln` en Visual Studio o ejecuta `build-release.ps1` desde PowerShell.
 
-Las bibliotecas de interoperabilidad incluidas se generan a partir de las bibliotecas de tipos de Windows Update Agent y del Programador de tareas presentes en Windows. No se necesita ningún paquete externo.
+Las bibliotecas de interoperabilidad incluidas se generan a partir de las bibliotecas de tipos de Windows Update Agent y del Programador de tareas presentes en Windows. No se necesita ningún paquete externo para el código de la aplicación.
+
+Los dos scripts comparten la deteccion de dependencias: si falta MSBuild, descargan el instalador oficial firmado de Visual Studio Build Tools; si faltan las referencias de .NET 4.6.1, descargan el paquete oficial NuGet a `Source/.build-deps`. `-NoInstall` impide descargas/instalaciones y `-CopyToRelease` copia el EXE, config, DLL y simbolos disponibles a `Release`.
+
+Para mantenimiento asistido por IA, empieza por [AGENTS.md](../AGENTS.md) y consulta la seccion necesaria del [mapa del proyecto](../docs/AI_MAP.md).
 
 ## Origen y licencia
 

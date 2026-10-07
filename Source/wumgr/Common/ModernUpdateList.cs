@@ -26,6 +26,7 @@ namespace wumgr
             public string GroupKey;
             public string GroupTitle;
             public ListViewItem Item;
+            public int ItemIndex;
             public int Top;
             public int Height;
         }
@@ -45,7 +46,7 @@ namespace wumgr
         private readonly Color selectedBackground = Color.FromArgb(51, 51, 51);
         private readonly Color border = Color.FromArgb(58, 58, 58);
         private readonly Color text = Color.FromArgb(246, 246, 246);
-        private readonly Color secondaryText = Color.FromArgb(205, 205, 205);
+        private readonly Color secondaryText = Color.FromArgb(224, 226, 230);
         private readonly Color muted = Color.FromArgb(154, 154, 154);
         private readonly Color accent = Color.FromArgb(224, 226, 230);
         private readonly Color danger = Color.FromArgb(226, 126, 132);
@@ -60,6 +61,7 @@ namespace wumgr
         private readonly int[] minimumColumnWidths = { 150, 80, 70, 65, 60, 95 };
         private string[] headers = { "Actualización", "Categoría", "Artículo", "Fecha", "Tamaño", "Estado" };
         private Font regularFont;
+        private Font strikeoutFont;
         private Font semiboldFont;
         private Font emptyTitleFont;
         private int verticalOffset;
@@ -89,9 +91,10 @@ namespace wumgr
             TabStop = true;
             BackColor = background;
             ForeColor = text;
-            regularFont = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
-            semiboldFont = new Font("Segoe UI Semibold", 9.2F, FontStyle.Bold, GraphicsUnit.Point);
-            emptyTitleFont = new Font("Segoe UI Semibold", 17F, FontStyle.Bold, GraphicsUnit.Point);
+            regularFont = UiFonts.Create(10F, FontStyle.Regular, GraphicsUnit.Point);
+            strikeoutFont = UiFonts.Create(10F, FontStyle.Strikeout, GraphicsUnit.Point);
+            semiboldFont = UiFonts.Create(10F, FontStyle.Bold, GraphicsUnit.Point);
+            emptyTitleFont = UiFonts.Create(17F, FontStyle.Bold, GraphicsUnit.Point);
         }
 
         public event EventHandler<ItemEventArgs> ItemCheckedChanged;
@@ -221,8 +224,8 @@ namespace wumgr
                 return string.Empty;
             string value = item.SubItems[column].Text ?? string.Empty;
             Rectangle bounds = GetCellBounds(layout[entryIndex], column);
-            int padding = column == 0 && showCheckBoxes ? 43 : (column == 5 ? 31 : 17);
-            int measured = TextRenderer.MeasureText(value, item.Font ?? regularFont, Size.Empty,
+            int padding = column == 0 && showCheckBoxes ? 43 : (column == 5 ? 31 : 15);
+            int measured = TextRenderer.MeasureText(value, GetItemFont(item), Size.Empty,
                 TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width;
             return measured > Math.Max(0, bounds.Width - padding) ? value : string.Empty;
         }
@@ -232,6 +235,7 @@ namespace wumgr
             if (disposing)
             {
                 regularFont.Dispose();
+                strikeoutFont.Dispose();
                 semiboldFont.Dispose();
                 emptyTitleFont.Dispose();
             }
@@ -305,8 +309,9 @@ namespace wumgr
             layout.Clear();
             int top = 0;
             string previousGroup = null;
-            foreach (ListViewItem item in items)
+            for (int itemIndex = 0; itemIndex < items.Count; itemIndex++)
             {
+                ListViewItem item = items[itemIndex];
                 string groupKey = GetGroupKey(item);
                 if (showGroups && !string.Equals(previousGroup, groupKey, StringComparison.Ordinal))
                 {
@@ -325,7 +330,7 @@ namespace wumgr
                 bool collapsed;
                 if (showGroups && collapsedGroups.TryGetValue(groupKey, out collapsed) && collapsed)
                     continue;
-                layout.Add(new LayoutEntry { Item = item, Top = top, Height = RowHeight });
+                layout.Add(new LayoutEntry { Item = item, ItemIndex = itemIndex, Top = top, Height = RowHeight });
                 top += RowHeight;
             }
             contentHeight = top;
@@ -355,6 +360,8 @@ namespace wumgr
 
         private void DrawHeader(Graphics graphics)
         {
+            SmoothingMode smoothing = graphics.SmoothingMode;
+            graphics.SmoothingMode = SmoothingMode.None;
             Rectangle header = new Rectangle(0, 0, Math.Max(0, Width - ScrollBarSize), HeaderHeight);
             using (SolidBrush fill = new SolidBrush(headerBackground))
                 graphics.FillRectangle(fill, header);
@@ -366,10 +373,10 @@ namespace wumgr
                 for (int column = 0; column < 6; column++)
                 {
                     int width = GetColumnWidth(column);
-                    Rectangle textBounds = new Rectangle(x + 10, 0, Math.Max(0, width - 18), HeaderHeight);
-                    TextRenderer.DrawText(graphics, headers[column], regularFont, textBounds, text,
+                    Rectangle textBounds = new Rectangle(x + 10, 0, Math.Max(0, width - 15), HeaderHeight);
+                    TextRenderer.DrawText(graphics, headers[column], semiboldFont, textBounds, text,
                         TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
-                        TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                        TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
                     graphics.DrawLine(separator, x + width - 1, 6, x + width - 1, HeaderHeight - 6);
                     x += width;
                 }
@@ -384,6 +391,7 @@ namespace wumgr
             }
             using (SolidBrush corner = new SolidBrush(headerBackground))
                 graphics.FillRectangle(corner, Math.Max(0, Width - ScrollBarSize), 0, ScrollBarSize, HeaderHeight);
+            graphics.SmoothingMode = smoothing;
         }
 
         private void DrawEntries(Graphics graphics, Rectangle viewport)
@@ -431,13 +439,12 @@ namespace wumgr
                 Math.Max(0, bounds.Width - 41), bounds.Height);
             TextRenderer.DrawText(graphics, entry.GroupTitle, semiboldFont, textBounds, text,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
-                TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
         }
 
         private void DrawRow(Graphics graphics, LayoutEntry entry, Rectangle bounds, int entryIndex)
         {
-            int itemIndex = items.IndexOf(entry.Item);
-            Color rowColor = itemIndex % 2 == 0 ? rowEven : rowOdd;
+            Color rowColor = entry.ItemIndex % 2 == 0 ? rowEven : rowOdd;
             if (!entry.Item.BackColor.IsEmpty &&
                 entry.Item.BackColor.ToArgb() != SystemColors.Window.ToArgb() &&
                 entry.Item.BackColor.ToArgb() != background.ToArgb())
@@ -448,8 +455,8 @@ namespace wumgr
                 rowColor = hoverBackground;
             using (SolidBrush fill = new SolidBrush(rowColor))
                 graphics.FillRectangle(fill, bounds);
-            using (Pen line = new Pen(Color.FromArgb(43, 43, 43)))
-                graphics.DrawLine(line, bounds.Left, bounds.Bottom - 1, bounds.Right, bounds.Bottom - 1);
+            using (SolidBrush line = new SolidBrush(headerBackground))
+                graphics.FillRectangle(line, bounds.Left, bounds.Bottom - 1, bounds.Width, 1);
             if (entry.Item == selectedItem)
             {
                 using (SolidBrush selected = new SolidBrush(accent))
@@ -485,14 +492,21 @@ namespace wumgr
                 using (SolidBrush dot = new SolidBrush(error ? danger : accent))
                     graphics.FillEllipse(dot, bounds.Left + 10, bounds.Top + (bounds.Height - 6) / 2, 6, 6);
                 leftPadding = 26;
-                cellText = item == selectedItem ? text : Color.FromArgb(190, 190, 190);
+                cellText = error ? danger : item == selectedItem ? text : secondaryText;
             }
             string value = item.SubItems.Count > column ? item.SubItems[column].Text : string.Empty;
             Rectangle textBounds = new Rectangle(bounds.Left + leftPadding, bounds.Top,
-                Math.Max(0, bounds.Width - leftPadding - 7), bounds.Height);
-            TextRenderer.DrawText(graphics, value, item.Font ?? regularFont, textBounds, cellText,
+                Math.Max(0, bounds.Width - leftPadding - 5), bounds.Height);
+            TextRenderer.DrawText(graphics, value, GetItemFont(item), textBounds, cellText,
                 TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
-                TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+        }
+
+        private Font GetItemFont(ListViewItem item)
+        {
+            if (item.Font != null && item.Font.Name == "Ubuntu")
+                return item.Font;
+            return item.Font != null && item.Font.Strikeout ? strikeoutFont : regularFont;
         }
 
         private void DrawEmptyState(Graphics graphics, Rectangle viewport)

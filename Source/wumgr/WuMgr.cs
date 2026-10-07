@@ -48,20 +48,9 @@ namespace wumgr
             {
                 base.WndProc(ref msg);
                 Point cursor = PointToClient(Cursor.Position);
-                const int grip = 7;
-                bool left = cursor.X <= grip;
-                bool right = cursor.X >= ClientSize.Width - grip;
-                bool top = cursor.Y <= grip;
-                bool bottom = cursor.Y >= ClientSize.Height - grip;
-
-                if (left && top) msg.Result = new IntPtr(13);
-                else if (right && top) msg.Result = new IntPtr(14);
-                else if (left && bottom) msg.Result = new IntPtr(16);
-                else if (right && bottom) msg.Result = new IntPtr(17);
-                else if (left) msg.Result = new IntPtr(10);
-                else if (right) msg.Result = new IntPtr(11);
-                else if (top) msg.Result = new IntPtr(12);
-                else if (bottom) msg.Result = new IntPtr(15);
+                int hit = ResizeHitTest(ClientSize, cursor, modernResizeGrip);
+                if (hit != 0)
+                    msg.Result = new IntPtr(hit);
                 return;
             }
 
@@ -160,6 +149,7 @@ namespace wumgr
 
 
             agent = WuAgent.GetInstance();
+            agent.SetSearchUiContext(new WindowsFormsSynchronizationContext());
             agent.Progress += OnProgress;
             agent.UpdatesChaged += OnUpdates;
             agent.Finished += OnFinished;
@@ -338,6 +328,7 @@ namespace wumgr
 
         private void OnTimedEvent(Object source, EventArgs e)
         {
+            agent.PollSearchCompletion();
             bool updateNow = false;
             if (notifyIcon.Visible)
             { 

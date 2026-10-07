@@ -504,6 +504,8 @@ Consulta también [PRIVACY_POLICY.md](PRIVACY_POLICY.md).
 
 ## Estructura del código
 
+Para mantenimiento asistido por IA: [entrada breve](AGENTS.md) y [mapa de módulos, flujos y dependencias](docs/AI_MAP.md). Permiten localizar la parte relevante sin releer todo el código.
+
 El código compilable y sus documentos complementarios se encuentran bajo `Source`:
 
 ```text
@@ -598,7 +600,7 @@ El compilador muestra la versión actual de archivo y pregunta si deseas cambiar
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Source\build-release.ps1 -Configuration Release
 ```
 
-El script busca MSBuild en Visual Studio Build Tools, Visual Studio Community y, como último recurso, en .NET Framework.
+Ambos scripts usan el MSBuild moderno de Visual Studio. Si falta, descargan el instalador oficial de Build Tools y verifican su firma de Microsoft antes de ejecutarlo (puede requerir UAC). Si faltan las referencias de .NET Framework 4.6.1, descargan el paquete oficial Microsoft.NETFramework.ReferenceAssemblies.net461 1.0.3 a Source/.build-deps; no cambian el framework de la aplicación. Las DLL COM están incluidas en el repositorio y se comprueba su presencia. Usa -NoInstall para impedir descargas e instalaciones y -CopyToRelease para copiar todos los archivos necesarios a Release.
 
 ### Salida
 

@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -108,7 +109,8 @@ namespace wumgr
             otaOpenReleaseButton.Enabled = false;
             otaOpenReleaseButton.Click += delegate { OpenSelectedOtaRelease(); };
 
-            otaInstalledVersionLabel = CreateLabel("Versión instalada: comprobando...", 9F, FontStyle.Regular, UiMuted);
+            otaInstalledVersionLabel = new InstalledVersionBadge();
+            otaInstalledVersionLabel.Text = "Versión instalada: comprobando...";
             otaInstalledVersionLabel.AutoSize = false;
             otaInstalledVersionLabel.AutoEllipsis = true;
             otaInstalledVersionLabel.Size = new Size(315, 36);
@@ -120,6 +122,7 @@ namespace wumgr
             actions.Controls.Add(otaOpenReleaseButton);
             actions.Controls.Add(otaInstalledVersionLabel);
             surface.Controls.Add(actions);
+            ConfigureResponsiveActions(surface, actions);
             return surface;
         }
 
@@ -147,6 +150,55 @@ namespace wumgr
             return card;
         }
 
+        private sealed class InstalledVersionBadge : Label
+        {
+            private readonly Font captionFont = UiFonts.Create(9F);
+
+            public InstalledVersionBadge()
+            {
+                Font = UiFonts.Create(10F, FontStyle.Bold);
+                BackColor = UiSurface;
+                ForeColor = UiText;
+                DoubleBuffered = true;
+                ResizeRedraw = true;
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                e.Graphics.Clear(BackColor);
+                if (Width < 4 || Height < 4)
+                    return;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                Rectangle bounds = new Rectangle(1, 2, Width - 3, Height - 5);
+                using (GraphicsPath path = CreateRoundedPath(bounds, 8))
+                using (SolidBrush fill = new SolidBrush(UiInput))
+                using (Pen border = new Pen(UiBorder))
+                {
+                    e.Graphics.FillPath(fill, path);
+                    e.Graphics.DrawPath(border, path);
+                }
+                int separator = Text.IndexOf(':');
+                string caption = separator >= 0 ? Text.Substring(0, separator + 1) : string.Empty;
+                string version = separator >= 0 ? Text.Substring(separator + 1).Trim() : Text;
+                TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
+                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
+                int captionWidth = TextRenderer.MeasureText(e.Graphics, caption, captionFont, Size.Empty, flags).Width;
+                Rectangle captionBounds = new Rectangle(12, 0, captionWidth, Height);
+                TextRenderer.DrawText(e.Graphics, caption, captionFont, captionBounds, UiAccent, flags);
+                int versionLeft = 12 + captionWidth + (caption.Length > 0 ? 7 : 0);
+                TextRenderer.DrawText(e.Graphics, version, Font,
+                    new Rectangle(versionLeft, 0, Math.Max(0, Width - versionLeft - 12), Height), UiText,
+                    flags | TextFormatFlags.EndEllipsis);
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing)
+                    captionFont.Dispose();
+                base.Dispose(disposing);
+            }
+        }
+
         private Control BuildOtaStatusBar()
         {
             RoundedPanel surface = new RoundedPanel();
@@ -160,19 +212,21 @@ namespace wumgr
             TableLayoutPanel status = new TableLayoutPanel();
             status.Dock = DockStyle.Fill;
             status.Margin = Padding.Empty;
-            status.ColumnCount = 2;
+            status.ColumnCount = 3;
             status.RowCount = 1;
+            status.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 320F));
+            status.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160F));
             status.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-            status.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260F));
 
-            otaStatusLabel = CreateLabel("Las OTAs se comprobarán automáticamente al abrir esta sección.", 9F, FontStyle.Regular, UiMuted);
+            otaStatusLabel = CreateLabel("Las OTAs se comprobarán automáticamente al abrir esta sección.", 10F, FontStyle.Regular, UiText);
             otaStatusLabel.Dock = DockStyle.Fill;
             otaStatusLabel.TextAlign = ContentAlignment.MiddleLeft;
             otaStatusLabel.AutoEllipsis = true;
 
             otaProgress = new ModernProgressBar();
-            otaProgress.Dock = DockStyle.Fill;
-            otaProgress.Margin = new Padding(16, 17, 4, 17);
+            otaProgress.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+            otaProgress.Height = 14;
+            otaProgress.Margin = new Padding(12, 0, 8, 0);
             otaProgress.Visible = false;
             status.Controls.Add(otaStatusLabel, 0, 0);
             status.Controls.Add(otaProgress, 1, 0);

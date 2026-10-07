@@ -54,6 +54,7 @@ namespace wumgr
 
         public void CancelOperations()
         {
+            Canceled = true;
             if(mCurTask != null)
                 mCurTask.Cancel();
         }
@@ -81,12 +82,16 @@ namespace wumgr
                 mCurTask.Finished += OnFinished;
                 if (mCurTask.Start())
                     return;
-                // Failedto start this task lets try an otehr one
+                Download.Failed = true;
+                mDownloads[mCurrentTask] = Download;
+                mCurTask = null;
                 mCurrentTask++;
             }
 
             FinishedEventArgs args = new FinishedEventArgs();
             args.Downloads = mDownloads;
+            args.Cancelled = Canceled;
+            mCurTask = null;
             mDownloads = null;
             args.Updates = mUpdates;
             mUpdates = null;
@@ -129,9 +134,12 @@ namespace wumgr
         {
             public List<Task> Downloads;
             public List<MsUpdate> Updates;
+            public bool Cancelled;
             public bool Success
             {
                 get {
+                    if (Cancelled)
+                        return false;
                     foreach (Task task in Downloads)
                     {
                         if (task.Failed)

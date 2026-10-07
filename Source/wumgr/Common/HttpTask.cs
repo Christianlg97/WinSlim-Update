@@ -13,9 +13,9 @@ using System.Windows.Threading;
 class HttpTask
 {
     //const int DefaultTimeout = 2 * 60 * 1000; // 2 minutes timeout
-    const int BUFFER_SIZE = 1024;
+    const int BUFFER_SIZE = 81920;
     private byte[] BufferRead;
-    private HttpWebRequest request;
+    private volatile HttpWebRequest request;
     private HttpWebResponse response;
     private Stream streamResponse;
     private Stream streamWriter;
@@ -23,10 +23,13 @@ class HttpTask
     private string mUrl;
     private string mDlPath;
     private string mDlName;
-    private int mLength = -1;
-    private int mOffset = -1;
-    private bool Canceled = false;
+    private long mLength = -1;
+    private long mOffset = -1;
+    private volatile bool Canceled = false;
     private DateTime lastTime;
+    private bool allowSegments;
+    private volatile CancellationTokenSource segmentedCancellation;
+    private readonly object progressLock = new object();
 
     public string DlPath { get { return mDlPath; } }
     public string DlName { get { return mDlName; } }
@@ -36,6 +39,7 @@ class HttpTask
         mUrl = Url;
         mDlPath = DlPath;
         mDlName = DlName;
+        allowSegments = Update;
 
         BufferRead = null;
         request = null;
@@ -59,10 +63,50 @@ class HttpTask
     public bool Start()
     {
         Canceled = false;
+        return StartRequest();
+    }
+
+    private bool StartRequest()
+    {
+        if (Canceled) return false;
         try
         {
-            // Create a HttpWebrequest object to the desired URL. 
+            TimeSpan delay = SegmentedHttpDownload.RetryDelay(new Uri(mUrl));
+            if (delay > TimeSpan.FromSeconds(60))
+            {
+                AppLog.Line("El servidor limita las descargas; quedan {0:F0} s antes de poder reintentar.", delay.TotalSeconds);
+                return false;
+            }
+            if (delay > TimeSpan.Zero)
+            {
+                CancellationTokenSource waiting = new CancellationTokenSource();
+                segmentedCancellation = waiting;
+                if (Canceled) waiting.Cancel();
+                AppLog.Line("Respetando el tiempo de espera del servidor ({0:F0} s).", delay.TotalSeconds);
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        await Task.Delay(delay, waiting.Token).ConfigureAwait(false);
+                        if (segmentedCancellation == waiting) segmentedCancellation = null;
+                        if (!StartRequest()) mDispatcher.Invoke(new Action(() => Finish(0, Canceled ? -1 : -2)));
+                    }
+                    catch (Exception error) { mDispatcher.Invoke(new Action(() => Finish(0, Canceled ? -1 : -3, error))); }
+                    finally
+                    {
+                        if (segmentedCancellation == waiting) segmentedCancellation = null;
+                        waiting.Dispose();
+                    }
+                });
+                return true;
+            }
+            // Create a HttpWebrequest object to the desired URL.
             request = (HttpWebRequest)WebRequest.Create(mUrl);
+            if (Canceled)
+            {
+                request.Abort();
+                return false;
+            }
             //myHttpWebRequest.AllowAutoRedirect = false;
 
             /**
@@ -84,6 +128,8 @@ class HttpTask
 
             BufferRead = new byte[BUFFER_SIZE];
             mOffset = 0;
+            mLength = -1;
+            mOldPercent = -1;
 
             // Start the asynchronous request.
             IAsyncResult result = (IAsyncResult)request.BeginGetResponse(new AsyncCallback(RespCallback), this);
@@ -103,25 +149,29 @@ class HttpTask
     public void Cancel()
     {
         Canceled = true;
-        if (request != null)
-            request.Abort();
+        CancellationTokenSource segmented = segmentedCancellation;
+        if (segmented != null)
+            try { segmented.Cancel(); } catch (ObjectDisposedException) { }
+        HttpWebRequest active = request;
+        if (active != null)
+            active.Abort();
     }
 
     private void Finish(int Success, int ErrCode, Exception Error = null)
     {
+        if (Canceled)
+            Success = 0;
         // Release the HttpWebResponse resource.
+        if (streamWriter != null)
+            streamWriter.Close();
+        if (streamResponse != null)
+            streamResponse.Close();
         if (response != null)
-        {
             response.Close();
-            if (streamResponse != null)
-                streamResponse.Close();
-            if (streamWriter != null)
-                streamWriter.Close();
-
-        }
         response = null;
         request = null;
         streamResponse = null;
+        streamWriter = null;
         BufferRead = null;
 
         if (Success == 1)
@@ -179,7 +229,7 @@ class HttpTask
 
             Console.WriteLine("The server at {0} returned {1}", task.response.ResponseUri, task.response.StatusCode);
 
-            string fileName = Path.GetFileName(task.response.ResponseUri.ToString());
+            string fileName = Path.GetFileName(task.response.ResponseUri.LocalPath);
             task.lastTime = DateTime.Now;
 
             Console.WriteLine("With headers:");
@@ -189,16 +239,18 @@ class HttpTask
 
                 if (key.Equals("Content-Length", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    task.mLength = int.Parse(task.response.Headers[key]);
+                    task.mLength = task.response.ContentLength;
                 }
                 else if (key.Equals("Content-Disposition", StringComparison.CurrentCultureIgnoreCase))
                 {
                     string cd = task.response.Headers[key];
-                    fileName = cd.Substring(cd.IndexOf("filename=") + 9).Replace("\"", "");
+                    int nameStart = cd.IndexOf("filename=", StringComparison.OrdinalIgnoreCase);
+                    if (nameStart >= 0)
+                        fileName = Path.GetFileName(cd.Substring(nameStart + 9).Split(';')[0].Trim().Trim('"'));
                 }
                 else if (key.Equals("Last-Modified", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    task.lastTime = DateTime.Parse(task.response.Headers[key]);
+                    task.lastTime = task.response.LastModified;
                 }
             }
 
@@ -225,6 +277,9 @@ class HttpTask
                 if (info.Exists)
                     info.Delete();
 
+                if (task.TryStartSegmented(info.FullName))
+                    return;
+
                 // Read the response into a Stream object.
                 task.streamResponse = task.response.GetResponseStream();
 
@@ -239,14 +294,21 @@ class HttpTask
         {
             if (e.Response != null)
             {
+                HttpWebResponse limited = e.Response as HttpWebResponse;
+                if (limited != null && ((int)limited.StatusCode == 429 || limited.StatusCode == HttpStatusCode.ServiceUnavailable) &&
+                    SegmentedHttpDownload.IsMicrosoftHost(limited.ResponseUri))
+                {
+                    TimeSpan delay = SegmentedHttpDownload.ParseRetryAfter(limited.Headers[HttpResponseHeader.RetryAfter]);
+                    SegmentedHttpDownload.RegisterCooldown(limited.ResponseUri, delay > TimeSpan.Zero ? delay : TimeSpan.FromSeconds(5));
+                }
                 string fileName = Path.GetFileName(e.Response.ResponseUri.AbsolutePath.ToString());
 
                 if (task.mDlName == null)
                     task.mDlName = fileName;
 
-                FileInfo testInfo = new FileInfo(task.mDlPath + @"\" + task.mDlName);
-                if (testInfo.Exists)
-                    Success = 2;
+                // An HTTP error does not prove that an existing file matches
+                // the requested version. Keep it, but report the failed transfer.
+                e.Response.Close();
             }
 
             if(Success == 0)
@@ -271,6 +333,72 @@ class HttpTask
     }
 
     private int mOldPercent = -1;
+
+    private bool TryStartSegmented(string temporaryPath)
+    {
+        string etag = response.Headers[HttpResponseHeader.ETag];
+        Uri uri = response.ResponseUri;
+        if (!allowSegments || mLength < SegmentedHttpDownload.MinimumLength ||
+            !SegmentedHttpDownload.IsMicrosoftHost(uri) || !SegmentedHttpDownload.HasStrongETag(etag) ||
+            !string.IsNullOrEmpty(response.ContentEncoding))
+            return false;
+        allowSegments = false;
+        response.Close();
+        request.Abort();
+        response = null;
+        request = null;
+        CancellationTokenSource cancellation = new CancellationTokenSource();
+        segmentedCancellation = cancellation;
+        if (Canceled) cancellation.Cancel();
+        Task.Run(async () =>
+        {
+            try
+            {
+                SegmentedDownloadResult result = await SegmentedHttpDownload.DownloadAsync(uri, temporaryPath,
+                    mLength, etag, cancellation.Token, bytes =>
+                    {
+                        lock (progressLock)
+                        {
+                            int percent = (int)Math.Min(100, bytes * 100.0 / mLength);
+                            if (percent <= mOldPercent) return;
+                            mOldPercent = percent;
+                            mDispatcher.BeginInvoke(new Action(() =>
+                            {
+                                if (!Canceled && segmentedCancellation == cancellation && Progress != null)
+                                    Progress(this, new ProgressEventArgs(percent));
+                            }));
+                        }
+                    }).ConfigureAwait(false);
+                if (result.Downloaded)
+                {
+                    AppLog.Line("Descarga HTTP adaptativa: {0} conexión(es), rangos y longitud verificados.", result.Connections);
+                    mDispatcher.Invoke(new Action(() => Finish(1, 0)));
+                }
+                else
+                {
+                    AppLog.Line(result.FallbackReason ?? "Se usará la descarga HTTP simple.");
+                    if (result.RetryAfter > TimeSpan.FromSeconds(60))
+                        throw new IOException("El servidor limita las descargas; respeta Retry-After antes de reintentar.");
+                    if (result.RetryAfter > TimeSpan.Zero)
+                        await Task.Delay(result.RetryAfter, cancellation.Token).ConfigureAwait(false);
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    segmentedCancellation = null;
+                    if (!StartRequest())
+                        mDispatcher.Invoke(new Action(() => Finish(0, Canceled ? -1 : -2)));
+                }
+            }
+            catch (Exception error)
+            {
+                mDispatcher.Invoke(new Action(() => Finish(0, Canceled ? -1 : -3, error)));
+            }
+            finally
+            {
+                if (segmentedCancellation == cancellation) segmentedCancellation = null;
+                cancellation.Dispose();
+            }
+        });
+        return true;
+    }
 
     private static void ReadCallBack(IAsyncResult asyncResult)
     {
@@ -306,6 +434,10 @@ class HttpTask
                 // this is done on finisch
                 //task.streamWriter.Close();
                 //task.streamResponse.Close();
+                if (task.Canceled)
+                    throw new OperationCanceledException();
+                if (task.mLength >= 0 && task.mOffset != task.mLength)
+                    throw new EndOfStreamException("La descarga terminó antes de recibir el archivo completo.");
                 Success = 1;
             }
 
