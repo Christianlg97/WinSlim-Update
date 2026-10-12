@@ -89,41 +89,64 @@ namespace wumgr
             actions.WrapContents = false;
             actions.BackColor = UiSurface;
 
+            // Misma jerarquía que Windows y paquetes: solo la búsqueda es primaria y las acciones sobre la
+            // selección son secundarias. Anchos ajustados al texto para que la insignia quepa en la misma fila
+            // con el ancho mínimo de la ventana.
             otaRefreshButton = new Button();
-            StyleActionButton(otaRefreshButton, "Buscar OTAs", UiAccent, Color.FromArgb(24, 24, 24), 140);
+            StyleActionButton(otaRefreshButton, "Buscar OTAs", UiAccent, Color.FromArgb(24, 24, 24), 128);
             otaRefreshButton.Height = 36;
             otaRefreshButton.Margin = new Padding(0, 0, 8, 0);
             otaRefreshButton.Click += async delegate { await RefreshOtaUpdatesAsync(); };
 
             otaApplyUpdateButton = new Button();
-            StyleActionButton(otaApplyUpdateButton, "Aplicar actualización", UiAccent, Color.FromArgb(24, 24, 24), 180);
-            otaApplyUpdateButton.Height = 36;
-            otaApplyUpdateButton.Margin = new Padding(0, 0, 8, 0);
+            StyleSecondaryActionButton(otaApplyUpdateButton, "Aplicar actualización", UiAccent);
+            otaApplyUpdateButton.Width = 176;
             otaApplyUpdateButton.Visible = false;
             otaApplyUpdateButton.Enabled = false;
             otaApplyUpdateButton.Click += async delegate { await ApplySelectedOtaAsync(); };
 
             otaOpenReleaseButton = new Button();
             StyleSecondaryActionButton(otaOpenReleaseButton, "Ver en GitHub", UiAccent);
-            otaOpenReleaseButton.Width = 150;
+            otaOpenReleaseButton.Width = 132;
             otaOpenReleaseButton.Enabled = false;
             otaOpenReleaseButton.Click += delegate { OpenSelectedOtaRelease(); };
 
             otaInstalledVersionLabel = new InstalledVersionBadge();
-            otaInstalledVersionLabel.Text = "Versión instalada: comprobando...";
             otaInstalledVersionLabel.AutoSize = false;
             otaInstalledVersionLabel.AutoEllipsis = true;
-            otaInstalledVersionLabel.Size = new Size(315, 36);
+            otaInstalledVersionLabel.Height = 36;
             otaInstalledVersionLabel.TextAlign = ContentAlignment.MiddleLeft;
-            otaInstalledVersionLabel.Margin = new Padding(14, 0, 0, 0);
+            otaInstalledVersionLabel.Margin = Padding.Empty;
+            otaInstalledVersionLabel.Text = "Versión instalada: comprobando...";
 
             actions.Controls.Add(otaRefreshButton);
             actions.Controls.Add(otaApplyUpdateButton);
             actions.Controls.Add(otaOpenReleaseButton);
             actions.Controls.Add(otaInstalledVersionLabel);
             surface.Controls.Add(actions);
+            AlignTrailingAction(actions, otaInstalledVersionLabel);
             ConfigureResponsiveActions(surface, actions);
             return surface;
+        }
+
+        // Mantiene el último control alineado a la derecha de la fila de botones mientras cabe; si no, lo pasa a
+        // una fila propia separada de los botones. El margen se fija antes de que FlowLayoutPanel coloque los
+        // controles, y ConfigureResponsiveActions mide esos mismos márgenes para calcular la altura del banner.
+        private static void AlignTrailingAction(FlowLayoutPanel actions, Control trailing)
+        {
+            actions.Layout += delegate
+            {
+                if (trailing.Parent != actions || !trailing.Visible)
+                    return;
+                int usedWidth = 0;
+                foreach (Control control in actions.Controls)
+                    if (control != trailing && control.Visible)
+                        usedWidth += control.Width + control.Margin.Horizontal;
+                int freeWidth = actions.ClientSize.Width - actions.Padding.Horizontal - usedWidth - trailing.Width;
+                Padding margin = freeWidth >= 0 ? new Padding(freeWidth, 0, 0, 0) : new Padding(0, 8, 0, 0);
+                if (trailing.Margin != margin)
+                    trailing.Margin = margin;
+            };
         }
 
         private Control BuildOtaListSurface()
@@ -152,6 +175,11 @@ namespace wumgr
 
         private sealed class InstalledVersionBadge : Label
         {
+            private const int HorizontalPadding = 14;
+            private const int CaptionSpacing = 7;
+            private const int MaximumWidth = 360;
+            private const TextFormatFlags TextFlags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
             private readonly Font captionFont = UiFonts.Create(9F);
 
             public InstalledVersionBadge()
@@ -163,32 +191,62 @@ namespace wumgr
                 ResizeRedraw = true;
             }
 
+            // El ancho sigue al texto para que la insignia no deje hueco vacío ni empuje los botones a otra fila.
+            protected override void OnTextChanged(EventArgs e)
+            {
+                base.OnTextChanged(e);
+                FitWidthToText();
+            }
+
+            protected override void OnFontChanged(EventArgs e)
+            {
+                base.OnFontChanged(e);
+                FitWidthToText();
+            }
+
+            private void FitWidthToText()
+            {
+                string caption, version;
+                SplitText(out caption, out version);
+                int width = 2 * HorizontalPadding + TextRenderer.MeasureText(version, Font, Size.Empty, TextFlags).Width;
+                if (caption.Length > 0)
+                    width += TextRenderer.MeasureText(caption, captionFont, Size.Empty, TextFlags).Width + CaptionSpacing;
+                Width = Math.Min(MaximumWidth, width);
+            }
+
+            private void SplitText(out string caption, out string version)
+            {
+                string text = Text ?? string.Empty;
+                int separator = text.IndexOf(':');
+                caption = separator >= 0 ? text.Substring(0, separator + 1) : string.Empty;
+                version = separator >= 0 ? text.Substring(separator + 1).Trim() : text;
+            }
+
             protected override void OnPaint(PaintEventArgs e)
             {
                 e.Graphics.Clear(BackColor);
                 if (Width < 4 || Height < 4)
                     return;
+                // Misma geometría que los botones de acción (relleno 9 px y contorno interior 8 px) para que la
+                // insignia comparta altura y línea base con ellos.
                 e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-                Rectangle bounds = new Rectangle(1, 2, Width - 3, Height - 5);
-                using (GraphicsPath path = CreateRoundedPath(bounds, 8))
+                using (GraphicsPath fillPath = CreateRoundedPath(new Rectangle(0, 0, Width - 1, Height - 1), 9))
+                using (GraphicsPath borderPath = CreateRoundedPath(new Rectangle(1, 1, Width - 3, Height - 3), 8))
                 using (SolidBrush fill = new SolidBrush(UiInput))
                 using (Pen border = new Pen(UiBorder))
                 {
-                    e.Graphics.FillPath(fill, path);
-                    e.Graphics.DrawPath(border, path);
+                    e.Graphics.FillPath(fill, fillPath);
+                    e.Graphics.DrawPath(border, borderPath);
                 }
-                int separator = Text.IndexOf(':');
-                string caption = separator >= 0 ? Text.Substring(0, separator + 1) : string.Empty;
-                string version = separator >= 0 ? Text.Substring(separator + 1).Trim() : Text;
-                TextFormatFlags flags = TextFormatFlags.Left | TextFormatFlags.VerticalCenter |
-                    TextFormatFlags.SingleLine | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix;
-                int captionWidth = TextRenderer.MeasureText(e.Graphics, caption, captionFont, Size.Empty, flags).Width;
-                Rectangle captionBounds = new Rectangle(12, 0, captionWidth, Height);
-                TextRenderer.DrawText(e.Graphics, caption, captionFont, captionBounds, UiAccent, flags);
-                int versionLeft = 12 + captionWidth + (caption.Length > 0 ? 7 : 0);
+                string caption, version;
+                SplitText(out caption, out version);
+                int captionWidth = TextRenderer.MeasureText(e.Graphics, caption, captionFont, Size.Empty, TextFlags).Width;
+                Rectangle captionBounds = new Rectangle(HorizontalPadding, 0, captionWidth, Height);
+                TextRenderer.DrawText(e.Graphics, caption, captionFont, captionBounds, UiMuted, TextFlags);
+                int versionLeft = HorizontalPadding + captionWidth + (caption.Length > 0 ? CaptionSpacing : 0);
                 TextRenderer.DrawText(e.Graphics, version, Font,
-                    new Rectangle(versionLeft, 0, Math.Max(0, Width - versionLeft - 12), Height), UiText,
-                    flags | TextFormatFlags.EndEllipsis);
+                    new Rectangle(versionLeft, 0, Math.Max(0, Width - versionLeft - HorizontalPadding), Height), UiText,
+                    TextFlags | TextFormatFlags.EndEllipsis);
             }
 
             protected override void Dispose(bool disposing)

@@ -27,19 +27,24 @@ $surface.Padding = [Windows.Forms.Padding]::new(12,8,12,8)
 $actions = New-Object Windows.Forms.FlowLayoutPanel
 $actions.Dock = [Windows.Forms.DockStyle]::Fill
 $actions.Margin = [Windows.Forms.Padding]::Empty
-foreach ($width in @(140,180,150,315)) {
+foreach ($width in @(128,176,132)) {
     $button = New-Object Windows.Forms.Button
     $button.Size = [Drawing.Size]::new($width,36)
     $button.Margin = [Windows.Forms.Padding]::new(0,0,8,0)
     $actions.Controls.Add($button)
 }
+# Insignia de version instalada OTA: alineada a la derecha mientras cabe (ajuste exacto con ancho 792).
+$badge = New-Object Windows.Forms.Label
+$badge.Size = [Drawing.Size]::new(252,36)
+$actions.Controls.Add($badge)
 $surface.Controls.Add($actions)
 $page.Controls.Add($surface,0,0)
 $form.Controls.Add($page)
+$windowType.GetMethod('AlignTrailingAction',$flags).Invoke($null,@($actions.PSObject.BaseObject,$badge.PSObject.BaseObject))
 $windowType.GetMethod('ConfigureResponsiveActions',$flags).Invoke($null,@($surface.PSObject.BaseObject,$actions.PSObject.BaseObject))
 try {
     $form.Show()
-    foreach ($width in @(804,944,1366,804)) {
+    foreach ($width in @(804,792,944,1366,791,700)) {
         $form.ClientSize = [Drawing.Size]::new($width,500)
         $form.PerformLayout()
         $actions.PerformLayout()
@@ -48,6 +53,13 @@ try {
             if ($button.Right -gt $actions.ClientSize.Width -or $button.Bottom -gt $actions.ClientSize.Height) {
                 throw "Clipped action at width $width : $($button.Bounds), viewport $($actions.ClientSize)"
             }
+        }
+        if ($width -ge 792) {
+            if ($badge.Top -ne 0 -or $badge.Right -ne $actions.ClientSize.Width -or $page.RowStyles[0].Height -ne 62) {
+                throw "Trailing badge not right-aligned in one row at width $width : $($badge.Bounds), row $($page.RowStyles[0].Height)"
+            }
+        } elseif ($badge.Left -ne 0 -or $badge.Top -ne 44 -or $page.RowStyles[0].Height -ne 106) {
+            throw "Trailing badge did not wrap below actions at width $width : $($badge.Bounds), row $($page.RowStyles[0].Height)"
         }
         Write-Output "PASS: action layout at content width $width, row height $($page.RowStyles[0].Height)"
     }
